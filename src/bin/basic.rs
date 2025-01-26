@@ -8,17 +8,15 @@ use log::LevelFilter;
 use simplelog::{ConfigBuilder, WriteLogger};
 use wg_2024::packet::{Fragment, Packet, PacketType};
 use wg_2024::network::{NodeId, SourceRoutingHeader};
-use client::{ClientCommand, ClientEvent, ClientType, DronegowskiClient};
+use client::{ClientType, DronegowskiClient};
+use dronegowski_utils::hosts::{ClientCommand, ClientEvent, TestMessage};
+use dronegowski_utils::functions::simple_log;
+use wg_2024::packet::PacketType::MsgFragment;
 
 fn main() {
 
     // Logger di simplelog
-    let log_level = LevelFilter::Info;
-    let _logger = WriteLogger::init(
-        log_level,
-        ConfigBuilder::new().set_thread_level(log_level).build(),
-        File::create("output.log").expect("Could not create log file"),
-    );
+    simple_log();
 
     // Creazione dei canali
     let (sim_controller_send, sim_controller_recv) = unbounded::<ClientEvent>();
@@ -26,7 +24,7 @@ fn main() {
     let (packet_send, packet_recv) = unbounded::<Packet>();
 
     // Mappa dei vicini (drone collegati)
-    let (neighbor_send, _) = unbounded();
+    let (neighbor_send, neighbor_recv) = unbounded();
     let mut senders = HashMap::new();
     senders.insert(2, neighbor_send); // Drone 2 come vicino
 
@@ -39,49 +37,28 @@ fn main() {
         senders,
     );
 
-    let fragment1 = Packet {
-        pack_type: PacketType::MsgFragment(Fragment {
-            fragment_index: 0,
-            total_n_fragments: 2,
-            length: 128,
-            data: [1; 128], // Primo frammento
-        }),
-        routing_header: SourceRoutingHeader {
-            hop_index: 0,
-            hops: vec![1, 2],
-        },
-        session_id: 42,
-    };
 
-    let fragment2 = Packet {
-        pack_type: PacketType::MsgFragment(Fragment {
-            fragment_index: 1,
-            total_n_fragments: 2,
-            length: 128,
-            data: [2; 128], // Secondo frammento
-        }),
-        routing_header: SourceRoutingHeader {
-            hop_index: 0,
-            hops: vec![1, 2],
-        },
-        session_id: 42,
-    };
+    // let client_id = client.id; // ID del client
+    // let neighbor_count = client.packet_send.len(); // Numero di vicini
 
-    let client_id = client.id; // ID del client
-    let neighbor_count = client.packet_send.len(); // Numero di vicini
+    let mut handles = Vec::new();
 
-    thread::spawn(move || {
+    handles.push(thread::spawn(move || {
         client.run();
-    });
+    }));
 
-    packet_send.send(fragment1).unwrap();
-    packet_send.send(fragment2).unwrap();
-
-    // Configurazione di eframe
+    // // Configurazione di eframe
     // let native_options = eframe::NativeOptions::default();
     // let _ = eframe::run_native("My egui App", native_options, Box::new(move |cc| {
     //     Ok(Box::new(MyEguiApp::new(cc, client_id as u32, neighbor_count, client)))
     // }));
+
+    while let Some(handle) = handles.pop() {
+        handle
+            .join()
+            .expect("Error occured while exiting a client");
+    }
+
 }
 
 struct MyEguiApp {
