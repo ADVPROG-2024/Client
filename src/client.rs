@@ -6,7 +6,8 @@ use wg_2024::controller::{DroneCommand, DroneEvent};
 use wg_2024::network::{NodeId, SourceRoutingHeader};
 use wg_2024::packet::{FloodRequest, FloodResponse, Fragment, NodeType, Packet, PacketType};
 use wg_2024::packet::PacketType::Ack;
-use dronegowski_utils::hosts::{ClientCommand, ClientEvent, TestMessage};
+use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientMessages, TestMessage};
+use serde::Serialize;
 
 #[derive(Clone, Debug)]
 pub enum ClientType {
@@ -50,17 +51,32 @@ impl DronegowskiClient {
     pub fn run(&mut self) {
         loop {
             // log::info!("Client entering the run loop in state");
-            select!{
+            select_biased!{
                 recv(self.packet_recv) -> packet_res => {
                     if let Ok(packet) = packet_res {
                         self.handle_packet(packet);
                     }
                 }
                 recv(self.sim_controller_recv) -> command_res => {
-                    // if let Ok(command) = command_res {
+                    if let Ok(command) = command_res {
+                        // log::info!("Ricevuto un Client Command: {:?}", command);
                         log::info!("Ricevuto un Client Command");
-                        self.ask_server_type(12);
-                    // }
+                        match command {
+                            ClientCommand::RemoveSender(nodeId) => {
+                                // Copia dal drone
+                            }
+                            ClientCommand::AddSender(nodeId, packet_sender) => {
+                                // Copia dal drone
+                            }
+                            ClientCommand::ServerType(nodeId) => self.ask_server_type(&nodeId),
+                            ClientCommand::FilesList(nodeId) => self.request_file_list(&nodeId),
+                            ClientCommand::File(nodeId, fileId) => self.request_file(&nodeId, fileId),
+                            ClientCommand::Media(nodeId, mediaId) => self.request_media(&nodeId, mediaId),
+                            ClientCommand::ClientList(nodeId) => self.request_client_list(&nodeId),
+                            ClientCommand::RegistrationToChat(nodeId) => self.register_with_server(&nodeId),
+                            ClientCommand::MessageFor(nodeId, clientId, message) => self.send_message(&nodeId, clientId, message),
+                        }
+                    }
                 },
 
             }
@@ -100,6 +116,9 @@ impl DronegowskiClient {
                         match deserialized_message {
                             Ok(res) => {
                                 log::info!("Ricevuto frammento da sessione {} del nodo {}: frammento {}. Messaggio ricevuto al 100%", packet.session_id, src_id, fragment.fragment_index);
+                                // Gestisci messaggi ricevuti dal server
+                                // ServerMessages
+                                // todo!()
                                 let _ = self.sim_controller_send.send(ClientEvent::MessageReceived(res));
                             }
                             Err(e) => {
@@ -173,7 +192,7 @@ impl DronegowskiClient {
 
     }
 
-    fn compute_route(&self, target_server: NodeId) -> Option<Vec<NodeId>> {
+    fn compute_route(&self, target_server: &NodeId) -> Option<Vec<NodeId>> {
         use std::collections::VecDeque;
 
         let mut visited = HashSet::new();
@@ -184,7 +203,7 @@ impl DronegowskiClient {
         visited.insert(self.id);
 
         while let Some(current) = queue.pop_front() {
-            if current == target_server {
+            if current == *target_server {
                 let mut path = vec![current];
                 while let Some(&pred) = predecessors.get(&path[0]) {
                     path.insert(0, pred);
@@ -204,53 +223,145 @@ impl DronegowskiClient {
         None
     }
 
-    pub fn register_with_server(&self) -> Result<(), String> {
-        // Logica di registrazione
-        Ok(())
+    pub fn register_with_server(&self, server_id: &NodeId) {
+        if let Some(path) = self.compute_route(server_id) {
+            let message = TestMessage::WebServerMessages(ClientMessages::RegistrationToChat);
+            let serialized_message = bincode::serialize(&message).expect("Serialization failed");
+            log::info!("Path {:?}", path.clone());
+
+            let res = fragment_message(&serialized_message, path.clone(), generate_unique_id());
+
+            if path.clone().len() > 1 {
+                if let Some(sender) = self.packet_send.get(&path[1]) {
+                    for packet in res {
+                        log::info!("Inviando {:?} a nodo {:?}", packet, path[1]);
+                        let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet.clone()));
+                        sender.send(packet).expect("Invio pacchetto fallito");
+                    }
+                }
+            }
+        }
     }
 
-    pub fn request_client_list(&self) -> Result<(), String> {
-        // Logica per richiedere la lista clienti
-        Ok(())
+    pub fn request_client_list(&self,  server_id: &NodeId) {
+        if let Some(path) = self.compute_route(server_id) {
+            let message = TestMessage::WebServerMessages(ClientMessages::ClientList);
+            let serialized_message = bincode::serialize(&message).expect("Serialization failed");
+            log::info!("Path {:?}", path.clone());
+
+            let res = fragment_message(&serialized_message, path.clone(), generate_unique_id());
+
+            if path.clone().len() > 1 {
+                if let Some(sender) = self.packet_send.get(&path[1]) {
+                    for packet in res {
+                        log::info!("Inviando {:?} a nodo {:?}", packet, path[1]);
+                        let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet.clone()));
+                        sender.send(packet).expect("Invio pacchetto fallito");
+                    }
+                }
+            }
+        }
     }
 
-    pub fn send_message(&self, target_id: NodeId, message: &str) -> Result<(), String> {
-        // Logica per inviare un messaggio
-        Ok(())
+    pub fn send_message(&self,  server_id: &NodeId, target_id: NodeId, message_to_client: TestMessage) {
+        if let Some(path) = self.compute_route(server_id) {
+            let message = TestMessage::WebServerMessages(ClientMessages::MessageFor(target_id, message_to_client));
+            let serialized_message = bincode::serialize(&message).expect("Serialization failed");
+            log::info!("Path {:?}", path.clone());
+
+            let res = fragment_message(&serialized_message, path.clone(), generate_unique_id());
+
+            if path.clone().len() > 1 {
+                if let Some(sender) = self.packet_send.get(&path[1]) {
+                    for packet in res {
+                        log::info!("Inviando {:?} a nodo {:?}", packet, path[1]);
+                        let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet.clone()));
+                        sender.send(packet).expect("Invio pacchetto fallito");
+                    }
+                }
+            }
+        }
     }
 
-    pub fn request_file_list(&self) -> Result<(), String> {
-        // Logica per ottenere la lista file
-        Ok(())
+    pub fn request_file_list(&self, server_id: &NodeId) {
+        if let Some(path) = self.compute_route(server_id) {
+            let message = TestMessage::WebServerMessages(ClientMessages::FilesList);
+            let serialized_message = bincode::serialize(&message).expect("Serialization failed");
+            log::info!("Path {:?}", path.clone());
+
+            let res = fragment_message(&serialized_message, path.clone(), generate_unique_id());
+
+            if path.clone().len() > 1 {
+                if let Some(sender) = self.packet_send.get(&path[1]) {
+                    for packet in res {
+                        log::info!("Inviando {:?} a nodo {:?}", packet, path[1]);
+                        let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet.clone()));
+                        sender.send(packet).expect("Invio pacchetto fallito");
+                    }
+                }
+            }
+        }
     }
 
-    pub fn request_file(&self, file_name: &str) -> Result<(), String> {
-        // Logica per scaricare un file
-        Ok(())
+    pub fn request_file(&self, server_id: &NodeId, file_id: u64) {
+        if let Some(path) = self.compute_route(server_id) {
+            let message = TestMessage::WebServerMessages(ClientMessages::File(file_id));
+            let serialized_message = bincode::serialize(&message).expect("Serialization failed");
+            log::info!("Path {:?}", path.clone());
+
+            let res = fragment_message(&serialized_message, path.clone(), generate_unique_id());
+
+            if path.clone().len() > 1 {
+                if let Some(sender) = self.packet_send.get(&path[1]) {
+                    for packet in res {
+                        log::info!("Inviando {:?} a nodo {:?}", packet, path[1]);
+                        let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet.clone()));
+                        sender.send(packet).expect("Invio pacchetto fallito");
+                    }
+                }
+            }
+        }
     }
 
-    pub fn ask_server_type(&self, server_id: NodeId) { // -> Server type {
-        // let path = self.compute_route(server_id);
-        // // Frammentare il messaggio
-        // let message = "ciao";
-        // let res = fragment_message(&message, path.unwrap(), generate_unique_id());
-        // for packet in res {
-        //     log::info!("{:?}", packet)
-        // }
+    pub fn request_media(&self, server_id: &NodeId, file_id: u64) {
+        if let Some(path) = self.compute_route(server_id) {
+            let message = TestMessage::WebServerMessages(ClientMessages::Media(file_id));
+            let serialized_message = bincode::serialize(&message).expect("Serialization failed");
+            log::info!("Path {:?}", path.clone());
 
-        // Inserire i frammenti all'interno di pacchetti
+            let res = fragment_message(&serialized_message, path.clone(), generate_unique_id());
 
-        // Mandare tutti i frammenti al primo nodo del path
-
-
+            if path.clone().len() > 1 {
+                if let Some(sender) = self.packet_send.get(&path[1]) {
+                    for packet in res {
+                        log::info!("Inviando {:?} a nodo {:?}", packet, path[1]);
+                        let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet.clone()));
+                        sender.send(packet).expect("Invio pacchetto fallito");
+                    }
+                }
+            }
+        }
     }
 
-    // pub fn registration_to_chat(&self, server_id: NodeId) -> Result {
-    //     if self.ask_server_type(server_id) == Communication server {
-    //         // Mandare un messaggio al server
-    //         fragment("registration_to_chat")
-    //     }
-    // }
+    pub fn ask_server_type(&self, server_id: &NodeId) { // -> Server type {
+        if let Some(path) = self.compute_route(server_id) {
+            let message = TestMessage::WebServerMessages(ClientMessages::ServerType);
+            let serialized_message = bincode::serialize(&message).expect("Serialization failed");
+            log::info!("Path {:?}", path.clone());
+
+            let res = fragment_message(&serialized_message, path.clone(), generate_unique_id());
+
+            if path.clone().len() > 1 {
+                if let Some(sender) = self.packet_send.get(&path[1]) {
+                    for packet in res {
+                        log::info!("Inviando {:?} a nodo {:?}", packet, path[1]);
+                        let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet.clone()));
+                        sender.send(packet).expect("Invio pacchetto fallito");
+                    }
+                }
+            }
+        }
+    }
 }
 
 
