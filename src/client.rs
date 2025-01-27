@@ -263,7 +263,7 @@ impl DronegowskiClient {
         }
     }
 
-    pub fn send_message(&self,  server_id: &NodeId, target_id: NodeId, message_to_client: TestMessage) {
+    pub fn send_message(&self,  server_id: &NodeId, target_id: NodeId, message_to_client: String) {
         if let Some(path) = self.compute_route(server_id) {
             let message = TestMessage::WebServerMessages(ClientMessages::MessageFor(target_id, message_to_client));
             let serialized_message = bincode::serialize(&message).expect("Serialization failed");
