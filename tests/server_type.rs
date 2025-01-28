@@ -6,7 +6,7 @@ mod tests {
     use std::time::Duration;
     use crossbeam_channel::unbounded;
     use dronegowski_utils::functions::simple_log;
-    use dronegowski_utils::hosts::{ClientCommand, ClientEvent, TestMessage};
+    use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientType, TestMessage};
     use wg_2024::packet::{FloodResponse, NodeType, Packet, PacketType};
     use client::DronegowskiClient;
 
@@ -32,6 +32,7 @@ mod tests {
             controller_recv,
             packet_recv.clone(),
             senders,
+            ClientType::ChatClients,
         );
 
         let packet1 = Packet {

@@ -6,14 +6,9 @@ use wg_2024::controller::{DroneCommand, DroneEvent};
 use wg_2024::network::{NodeId, SourceRoutingHeader};
 use wg_2024::packet::{FloodRequest, FloodResponse, Fragment, NodeType, Packet, PacketType};
 use wg_2024::packet::PacketType::Ack;
-use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientMessages, TestMessage};
+use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientMessages, ClientType, TestMessage};
 use serde::Serialize;
 
-#[derive(Clone, Debug)]
-pub enum ClientType {
-    WebBrowsers,
-    ChatClients,
-}
 
 pub struct DronegowskiClient {
     pub id: NodeId,
@@ -29,7 +24,7 @@ pub struct DronegowskiClient {
 
 
 impl DronegowskiClient {
-    pub fn new(id: NodeId, sim_controller_send: Sender<ClientEvent>, sim_controller_recv: Receiver<ClientCommand>, packet_recv: Receiver<Packet>, packet_send: HashMap<NodeId, Sender<Packet>>) -> Self {
+    pub fn new(id: NodeId, sim_controller_send: Sender<ClientEvent>, sim_controller_recv: Receiver<ClientCommand>, packet_recv: Receiver<Packet>, packet_send: HashMap<NodeId, Sender<Packet>>, client_type: ClientType) -> Self {
         log::info!(
             "Client {} Created",
             id
@@ -41,7 +36,7 @@ impl DronegowskiClient {
             sim_controller_recv,
             packet_recv,
             packet_send,
-            client_type: ClientType::ChatClients,
+            client_type,
             message_storage: HashMap::new(),
             topology: HashSet::new(),
             node_types: HashMap::new(),
