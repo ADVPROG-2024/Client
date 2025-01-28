@@ -15,7 +15,7 @@ use wg_2024::packet::PacketType::MsgFragment;
 
 fn main() {
 
-    // Logger di simplelog
+    // Logger di simplelogg
     simple_log();
 
     // Creazione dei canali
