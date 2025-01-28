@@ -6,7 +6,7 @@ use crossbeam_channel::unbounded;
 use dronegowski_utils::functions::{assembler, deserialize_message, fragment_message, simple_log};
 use wg_2024::packet::{FloodResponse, Fragment, NodeType, Packet, PacketType};
 use client::{DronegowskiClient};
-use dronegowski_utils::hosts::{ClientCommand, ClientEvent, CustomEnum, CustomStruct, TestMessage};
+use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientType, CustomEnum, CustomStruct, TestMessage};
 use wg_2024::network::SourceRoutingHeader;
 use wg_2024::packet::PacketType::MsgFragment;
 
@@ -32,6 +32,7 @@ fn test_network_discovery_protocol() {
         controller_recv,
         packet_recv.clone(),
         senders,
+        ClientType::ChatClients,
     );
 
     let packet1 = Packet {

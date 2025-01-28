@@ -9,7 +9,7 @@ use simplelog::{ConfigBuilder, WriteLogger};
 use wg_2024::packet::{Fragment, Packet, PacketType};
 use wg_2024::network::{NodeId, SourceRoutingHeader};
 use client::{ClientType, DronegowskiClient};
-use dronegowski_utils::hosts::{ClientCommand, ClientEvent, TestMessage};
+use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientType, TestMessage};
 use dronegowski_utils::functions::simple_log;
 use wg_2024::packet::PacketType::MsgFragment;
 
@@ -35,6 +35,7 @@ fn main() {
         controller_recv,
         packet_recv.clone(),
         senders,
+        ClientType::ChatClients,
     );
 
 

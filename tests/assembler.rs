@@ -21,7 +21,7 @@ mod tests {
     use std::collections::HashMap;
     use crossbeam_channel::unbounded;
     use dronegowski_utils::functions::simple_log;
-    use dronegowski_utils::hosts::{ClientCommand, ClientEvent};
+    use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientType};
     use wg_2024::packet::PacketType;
     use client::DronegowskiClient;
 
@@ -47,6 +47,7 @@ mod tests {
             controller_recv,
             packet_recv.clone(),
             senders,
+            ClientType::ChatClients,
         );
 
         let fragment1 = Packet { routing_header: SourceRoutingHeader { hop_index: 0, hops: vec![1, 2, 3] }, session_id: 42, pack_type: MsgFragment(Fragment { fragment_index: 1, total_n_fragments: 2, length: 43, data: [0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 81, 117, 101, 115, 116, 111, 32, 195, 168, 32, 117, 110, 32, 109, 101, 115, 115, 97, 103, 103, 105, 111, 32, 100, 105, 32, 116, 101, 115, 116, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }) };
