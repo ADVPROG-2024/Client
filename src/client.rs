@@ -7,6 +7,7 @@ use wg_2024::network::{NodeId, SourceRoutingHeader};
 use wg_2024::packet::{FloodRequest, FloodResponse, Fragment, NodeType, Packet, PacketType};
 use wg_2024::packet::PacketType::Ack;
 use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientMessages, ClientType, TestMessage};
+use eframe::egui;
 use serde::Serialize;
 
 
@@ -20,11 +21,12 @@ pub struct DronegowskiClient {
     pub message_storage: HashMap<(usize, NodeId), (Vec<u8>, Vec<bool>)>, // Store for reassembling messages
     pub topology: HashSet<(NodeId, NodeId)>, // Edges of the graph
     pub node_types: HashMap<NodeId, NodeType>, // Node types (Client, Drone, Server)
+    pub ctx: egui::Context, // Aggiunto il contesto
 }
 
 
 impl DronegowskiClient {
-    pub fn new(id: NodeId, sim_controller_send: Sender<ClientEvent>, sim_controller_recv: Receiver<ClientCommand>, packet_recv: Receiver<Packet>, packet_send: HashMap<NodeId, Sender<Packet>>, client_type: ClientType) -> Self {
+    pub fn new(id: NodeId, sim_controller_send: Sender<ClientEvent>, sim_controller_recv: Receiver<ClientCommand>, packet_recv: Receiver<Packet>, packet_send: HashMap<NodeId, Sender<Packet>>, client_type: ClientType, ctx: egui::Context) -> Self {
         log::info!(
             "Client {} Created",
             id
@@ -40,6 +42,7 @@ impl DronegowskiClient {
             message_storage: HashMap::new(),
             topology: HashSet::new(),
             node_types: HashMap::new(),
+            ctx,
         }
     }
 
@@ -114,7 +117,7 @@ impl DronegowskiClient {
                                 // Gestisci messaggi ricevuti dal server
                                 // ServerMessages
                                 // todo!()
-                                let _ = self.sim_controller_send.send(ClientEvent::MessageReceived(res));
+                                let _ = self.sim_controller_send.send(ClientEvent::MessageReceived(res.clone()));
                             }
                             Err(e) => {
                                 log::info!("{:?}", e);
