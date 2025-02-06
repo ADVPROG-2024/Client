@@ -6,9 +6,9 @@ use wg_2024::controller::{DroneCommand, DroneEvent};
 use wg_2024::network::{NodeId, SourceRoutingHeader};
 use wg_2024::packet::{FloodRequest, FloodResponse, Fragment, NodeType, Packet, PacketType};
 use wg_2024::packet::PacketType::Ack;
-use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientMessages, ClientType, TestMessage};
+use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientMessages, ClientType, TestMessage, ServerMessages}; // Import ServerMessages
 use serde::Serialize;
-
+use bincode;
 
 pub struct DronegowskiClient {
     pub id: NodeId,
@@ -21,7 +21,6 @@ pub struct DronegowskiClient {
     pub topology: HashSet<(NodeId, NodeId)>, // Edges of the graph
     pub node_types: HashMap<NodeId, NodeType>, // Node types (Client, Drone, Server)
 }
-
 
 impl DronegowskiClient {
     pub fn new(id: NodeId, sim_controller_send: Sender<ClientEvent>, sim_controller_recv: Receiver<ClientCommand>, packet_recv: Receiver<Packet>, packet_send: HashMap<NodeId, Sender<Packet>>, client_type: ClientType) -> Self {
@@ -45,7 +44,6 @@ impl DronegowskiClient {
 
     pub fn run(&mut self) {
         loop {
-            // log::info!("Client entering the run loop in state");
             select_biased!{
                 recv(self.packet_recv) -> packet_res => {
                     if let Ok(packet) = packet_res {
@@ -54,22 +52,46 @@ impl DronegowskiClient {
                 }
                 recv(self.sim_controller_recv) -> command_res => {
                     if let Ok(command) = command_res {
-                        // log::info!("Ricevuto un Client Command: {:?}", command);
-                        log::info!("Ricevuto un Client Command");
+                        log::info!("Client {}: Received ClientCommand: {:?}", self.id, command); // Log the received command
+
                         match command {
                             ClientCommand::RemoveSender(nodeId) => {
-                                // Copia dal drone
+                                log::info!("Client {}: Removing sender: {}", self.id, nodeId);
+                                // Add logic to actually remove the sender (if needed for Client)
                             }
                             ClientCommand::AddSender(nodeId, packet_sender) => {
-                                // Copia dal drone
+                                log::info!("Client {}: Adding sender: {} -> {:?}",self.id, nodeId, packet_sender);
+                                // Add logic to add the new sender.
+                                self.packet_send.insert(nodeId, packet_sender);
                             }
-                            ClientCommand::ServerType(nodeId) => self.ask_server_type(&nodeId),
-                            ClientCommand::FilesList(nodeId) => self.request_file_list(&nodeId),
-                            ClientCommand::File(nodeId, fileId) => self.request_file(&nodeId, fileId),
-                            ClientCommand::Media(nodeId, mediaId) => self.request_media(&nodeId, mediaId),
-                            ClientCommand::ClientList(nodeId) => self.request_client_list(&nodeId),
-                            ClientCommand::RegistrationToChat(nodeId) => self.register_with_server(&nodeId),
-                            ClientCommand::MessageFor(nodeId, clientId, message) => self.send_message(&nodeId, clientId, message),
+                            ClientCommand::ServerType(nodeId) => {
+                                log::info!("Client {}: Requesting ServerType from: {}", self.id, nodeId);
+                                self.ask_server_type(&nodeId);
+                            }
+                            ClientCommand::FilesList(nodeId) => {
+                                log::info!("Client {}: Requesting FilesList from: {}", self.id, nodeId);
+                                self.request_file_list(&nodeId);
+                            }
+                            ClientCommand::File(nodeId, fileId) => {
+                                log::info!("Client {}: Requesting File (ID: {}) from: {}",self.id, fileId, nodeId);
+                                self.request_file(&nodeId, fileId);
+                            }
+                            ClientCommand::Media(nodeId, mediaId) => {
+                                log::info!("Client {}: Requesting Media (ID: {}) from: {}", self.id, mediaId, nodeId);
+                                self.request_media(&nodeId, mediaId);
+                            }
+                            ClientCommand::ClientList(nodeId) => {
+                                log::info!("Client {}: Requesting ClientList from: {}", self.id, nodeId);
+                                self.request_client_list(&nodeId);
+                            }
+                            ClientCommand::RegistrationToChat(nodeId) => {
+                                log::info!("Client {}: Requesting RegistrationToChat from: {}", self.id, nodeId);
+                                self.register_with_server(&nodeId);
+                            }
+                            ClientCommand::MessageFor(nodeId, clientId, message) => {
+                                log::info!("Client {}: Sending message to client {} via server {}: {}", self.id, clientId, nodeId, message);
+                                self.send_message(&nodeId, clientId, message);
+                            }
                         }
                     }
                 },
@@ -79,65 +101,83 @@ impl DronegowskiClient {
     }
 
     fn handle_packet(&mut self, packet: Packet) {
+        log::info!("Client {}: Received packet: {:?}", self.id, packet); // Log the received packet
+
         match packet.pack_type {
             PacketType::MsgFragment(fragment) => {
                 if let Some(src_id) = packet.routing_header.source() {
-                    // Recupera o inizializza lo storage del messaggio
+                    log::info!("Client {}: Received MsgFragment from: {}, Session ID: {}, Fragment Index: {}, Total Fragments: {}",
+                        self.id, src_id, packet.session_id, fragment.fragment_index, fragment.total_n_fragments);
+
                     let entry = self.message_storage
                         .entry((packet.session_id as usize, src_id))
                         .or_insert_with(|| {
+                            log::info!("Client {}: Initializing message storage for session {} from {}", self.id, packet.session_id, src_id);
                             (
-                                Vec::<u8>::with_capacity((fragment.total_n_fragments * 128) as usize), // Dati del messaggio
-                                vec![false; fragment.total_n_fragments as usize], // Frammenti ricevuti
+                                Vec::<u8>::with_capacity((fragment.total_n_fragments * 128) as usize),
+                                vec![false; fragment.total_n_fragments as usize],
                             )
                         });
 
                     let (message_data, fragments_received) = entry;
-
-                    // Assembla il frammento
-                    log::info!("{:?}", fragment);
                     assembler(message_data, &fragment);
 
-                    // Segna il frammento come ricevuto
-                    let index = fragment.fragment_index as usize; // Usa indici 0-based
+                    let index = fragment.fragment_index as usize;
                     if index < fragments_received.len() {
                         fragments_received[index] = true;
                     }
 
-                    // Verifica se il messaggio è completo
                     if fragments_received.iter().all(|&received| received) {
                         let deserialized_message: Result<TestMessage, _> = deserialize_message::<TestMessage>(&message_data);
 
                         match deserialized_message {
                             Ok(res) => {
-                                log::info!("Ricevuto frammento da sessione {} del nodo {}: frammento {}. Messaggio ricevuto al 100%", packet.session_id, src_id, fragment.fragment_index);
-                                // Gestisci messaggi ricevuti dal server
-                                // ServerMessages
-                                // todo!()
+                                log::info!("Client {}: Message from session {} from {} fully reassembled: {:?}", self.id, packet.session_id, src_id, res);
                                 let _ = self.sim_controller_send.send(ClientEvent::MessageReceived(res.clone()));
+
+                                // Handling of specific server responses
+                                if let TestMessage::WebServerMessages(ClientMessages::ServerType) = res {
+                                    //Do something
+                                }
+
                             }
                             Err(e) => {
-                                log::info!("{:?}", e);
+                                log::error!("Client {}: Error deserializing message from session {} from {}: {:?}", self.id, packet.session_id, src_id, e);
                             }
                         }
+                        //Clean the storage.
+                        self.message_storage.remove(&(packet.session_id as usize, src_id));
+
                     } else {
-                        // Percentuale basata sui frammenti ricevuti
-                        let percentuale = (fragments_received.iter().filter(|&&received| received).count() * 100)
+                        let percentage = (fragments_received.iter().filter(|&&received| received).count() * 100)
                             / fragment.total_n_fragments as usize;
                         log::info!(
-                        "Ricevuto frammento da sessione {} del nodo {}: frammento {}. Messaggio ricevuto al {}%",
-                        packet.session_id, src_id, fragment.fragment_index, percentuale
-                    );
+                            "Client {}: Received fragment {}/{} for session {} from {}.  {}% complete.",
+                            self.id,
+                            fragment.fragment_index + 1,
+                            fragment.total_n_fragments,
+                            packet.session_id,
+                            src_id,
+                            percentage
+                        );
                     }
                 }
             }
-
             PacketType::FloodResponse(flood_response) => {
+                log::info!("Client {}: Received FloodResponse: {:?}", self.id, flood_response);
                 self.update_graph(flood_response.path_trace);
             }
-            _ => {}
+            PacketType::FloodRequest(flood_request) => {
+                log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
+            }
+            PacketType::Ack(session_id) => {
+                log::info!("Client {}: Received Ack for session: {}", self.id, session_id);
+                // Handle ACK (if you are using ACKs)
+            }
+            PacketType::Nack(_) => {}
         }
     }
+
 
 
     pub fn switch_client_type(&mut self) {
@@ -358,5 +398,3 @@ impl DronegowskiClient {
         }
     }
 }
-
-
