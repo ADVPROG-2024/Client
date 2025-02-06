@@ -178,6 +178,7 @@ impl DronegowskiClient {
                                                     log::info!("Client {}: Received RegistrationError, cause: {}", self.id, error);
                                                     let _ = self.sim_controller_send.send(ClientEvent::RegistrationError(src_id));
                                                 }
+                                                _ => {}
                                             }
                                         }
                                     }
