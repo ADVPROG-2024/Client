@@ -133,18 +133,65 @@ impl DronegowskiClient {
                         match deserialized_message {
                             Ok(res) => {
                                 log::info!("Client {}: Message from session {} from {} fully reassembled: {:?}", self.id, packet.session_id, src_id, res);
-                                let _ = self.sim_controller_send.send(ClientEvent::MessageReceived(res.clone()));
 
-                                // Handling of specific server responses
-                                if let TestMessage::WebServerMessages(ClientMessages::ServerType) = res {
-                                    //Do something
+                                // --- Handling ServerMessages ---
+                                if let TestMessage::WebServerMessages(client_message) = res {
+                                    match client_message{
+                                        ClientMessages::ServerType => {}
+                                        ClientMessages::FilesList => {}
+                                        ClientMessages::File(_) => {}
+                                        ClientMessages::Media(_) => {}
+                                        ClientMessages::RegistrationToChat => {}
+                                        ClientMessages::ClientList => {}
+                                        ClientMessages::MessageFor(_, _) => {}
+                                        ClientMessages::ServerMessages(server_message) => {
+                                            match server_message {
+                                                ServerMessages::ServerType(server_type) => {
+                                                    log::info!("Client {}: Received ServerType: {:?}", self.id, server_type);
+                                                    let _ = self.sim_controller_send.send(ClientEvent::ServerTypeReceived(src_id, server_type));
+                                                }
+                                                ServerMessages::ClientList(clients) => {
+                                                    log::info!("Client {}: Received ClientList: {:?}", self.id, clients);
+                                                    let _ = self.sim_controller_send.send(ClientEvent::ClientListReceived(src_id, clients));
+                                                }
+                                                ServerMessages::FilesList(files) => {
+                                                    log::info!("Client {}: Received FilesList: {:?}", self.id, files);
+                                                    let _ = self.sim_controller_send.send(ClientEvent::FilesListReceived(src_id, files));
+                                                }
+                                                ServerMessages::File(file_data) => {
+                                                    log::info!("Client {}: Received File data (size: {} bytes)", self.id, file_data.len());
+                                                    let _ = self.sim_controller_send.send(ClientEvent::FileReceived(src_id, file_data));
+                                                }
+                                                ServerMessages::Media(media_data) => {
+                                                    log::info!("Client {}: Received Media data (size: {} bytes)", self.id, media_data.len());
+                                                    let _ = self.sim_controller_send.send(ClientEvent::MediaReceived(src_id, media_data));
+                                                }
+                                                ServerMessages::MessageFrom(from_id, message) => {
+                                                    log::info!("Client {}: Received MessageFrom: {} from {}", self.id, message, from_id);
+                                                    let _ = self.sim_controller_send.send(ClientEvent::MessageFromReceived(src_id, from_id, message));
+                                                }
+                                                ServerMessages::RegistrationOk => {
+                                                    log::info!("Client {}: Received RegistrationOk", self.id);
+                                                    let _ = self.sim_controller_send.send(ClientEvent::RegistrationOk(src_id));
+                                                }
+                                                ServerMessages::RegistrationError(error) => {
+                                                    log::info!("Client {}: Received RegistrationError, cause: {}", self.id, error);
+                                                    let _ = self.sim_controller_send.send(ClientEvent::RegistrationError(src_id));
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                } else {
+                                    // Handle other TestMessage variants (if any)
+                                    let _ = self.sim_controller_send.send(ClientEvent::MessageReceived(res));
                                 }
-
                             }
                             Err(e) => {
                                 log::error!("Client {}: Error deserializing message from session {} from {}: {:?}", self.id, packet.session_id, src_id, e);
                             }
                         }
+
                         //Clean the storage.
                         self.message_storage.remove(&(packet.session_id as usize, src_id));
 
