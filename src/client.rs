@@ -225,7 +225,7 @@ impl DronegowskiClient {
                 log::info!("Client {}: Received FloodResponse: {:?}", self.id, flood_response);
                 self.update_graph(flood_response.path_trace);
             }
-            PacketType::FloodRequest(mut flood_request) => {
+            PacketType::FloodRequest(flood_request) => {
                 self.handle_flood_request(flood_request, packet.clone());
             },
             Ack(session_id) => {
