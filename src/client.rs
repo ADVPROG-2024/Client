@@ -58,17 +58,16 @@ impl DronegowskiClient {
                     if let Ok(command) = command_res {
                         log::info!("Client {}: Received ClientCommand: {:?}", self.id, command); // Log the received command
 
-                        self.server_discovery();
-
                         match command {
                             ClientCommand::RemoveSender(nodeId) => {
                                 log::info!("Client {}: Removing sender: {}", self.id, nodeId);
-                                // Add logic to actually remove the sender (if needed for Client)
+                                self.remove_neighbor(&nodeId);
+                                self.server_discovery();
                             }
                             ClientCommand::AddSender(nodeId, packet_sender) => {
                                 log::info!("Client {}: Adding sender: {} -> {:?}",self.id, nodeId, packet_sender);
-                                // Add logic to add the new sender.
-                                self.packet_send.insert(nodeId, packet_sender);
+                                self.add_neighbor(nodeId, packet_sender);
+                                self.server_discovery();
                             }
                             ClientCommand::ServerType(nodeId) => {
                                 log::info!("Client {}: Requesting ServerType from Server: {}", self.id, nodeId);
@@ -98,6 +97,10 @@ impl DronegowskiClient {
                                 log::info!("Client {}: Sending message to client {} via server {}: {}", self.id, clientId, nodeId, message);
                                 self.send_message(&nodeId, clientId, message);
                             }
+                            ClientCommand::RequestNetworkDiscovery => {
+                                log::info!("Client {}: Requesting Network Discovery", self.id);
+                                self.server_discovery();
+                            }
                         }
                     }
                 },
@@ -107,7 +110,7 @@ impl DronegowskiClient {
     }
 
     fn handle_packet(&mut self, packet: Packet) {
-        log::info!("Client {}: Received packet: {:?}", self.id, packet); // Log the received packet
+        log::info!("Client {}: Received packet: {:?}", self.id, packet);
 
         match packet.pack_type {
             PacketType::MsgFragment(fragment) => {
@@ -234,14 +237,13 @@ impl DronegowskiClient {
                 };
 
                 // 3.  Get the *source* of the FloodRequest (who sent it to *us*).
-                //     This is now guaranteed to exist because of our fix in the Drone.
                 let source_id = packet.routing_header.source().expect("FloodRequest must have a source");
 
                 // 4. Create the packet with the *reversed* path.
                 let response_packet = Packet {
                     pack_type: PacketType::FloodResponse(flood_response),
                     routing_header: SourceRoutingHeader {
-                        hop_index: 0, // Reset hop_index for the response
+                        hop_index: 0,
                         hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(),
                     },
                     session_id: packet.session_id, // Use the same session ID
@@ -490,4 +492,21 @@ impl DronegowskiClient {
             }
         }
     }
+
+    fn add_neighbor(&mut self, node_id: NodeId, sender: Sender<Packet>) {
+        if let std::collections::hash_map::Entry::Vacant(e) = self.packet_send.entry(node_id) {
+            e.insert(sender);
+        } else {
+            panic!("Sender for node {node_id} already stored in the map!");
+        }
+    }
+
+    fn remove_neighbor(&mut self, node_id: &NodeId) {
+        if self.packet_send.contains_key(node_id) {
+            self.packet_send.remove(node_id);
+        } else {
+            panic!("the {} is not neighbour of the drone {}", node_id, self.id);
+        }
+    }
+
 }
