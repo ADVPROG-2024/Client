@@ -9,6 +9,5 @@ dronegowski_utils = { git = "https://github.com/ADVPROG-2024/dronegowski_utils.g
 crossbeam-channel = "0.5.14"
 log = "0.4.22"
 simplelog = "^0.12.0"
-eframe = "0.30.0"
 bincode = "1.3.3"
 serde = { version = "1.0.217", features = ["derive"] }
