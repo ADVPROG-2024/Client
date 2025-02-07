@@ -247,11 +247,11 @@ impl DronegowskiClient {
                     log::info!(
                         "Client {}: Received File data (size: {} bytes)",
                         self.id,
-                        file_data.len()
+                        file_data.text.len()
                     );
                     let _ = self
                         .sim_controller_send
-                        .send(ClientEvent::FileReceived(src_id, file_data)); // Send FileReceived event.
+                        .send(ClientEvent::FileReceived(src_id, file_data.text)); // Send FileReceived event.
                 }
                 ServerMessages::Media(media_data) => {
                     log::info!(
