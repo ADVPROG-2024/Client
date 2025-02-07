@@ -246,11 +246,15 @@ impl DronegowskiClient {
     }
 
     pub fn server_discovery(&self) {
+
+        let mut path_trace = Vec::new();
+        path_trace.push((self.id, NodeType::Client));
+
         // Send flood_request to the neighbour nodes
         let flood_request = FloodRequest {
             flood_id: generate_unique_id(),
             initiator_id: self.id,
-            path_trace: Vec::new(),
+            path_trace,
         };
 
         for (node_id, sender) in &self.packet_send {
