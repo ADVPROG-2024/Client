@@ -225,7 +225,7 @@ impl DronegowskiClient {
                 log::info!("Client {}: Received FloodResponse: {:?}", self.id, flood_response);
                 self.update_graph(flood_response.path_trace);
             }
-            PacketType::FloodRequest(flood_request) => {
+            PacketType::FloodRequest(ref mut flood_request) => {
                 self.handle_flood_request(flood_request, packet.clone());
             },
             Ack(session_id) => {
@@ -474,7 +474,7 @@ impl DronegowskiClient {
         }
     }
 
-    fn handle_flood_request(&mut self, mut flood_request: FloodRequest, packet: Packet) {
+    fn handle_flood_request(&mut self, mut flood_request: &mut FloodRequest, packet: Packet) {
         log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
 
         // 1. Add self to the path_trace.
