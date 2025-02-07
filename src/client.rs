@@ -1,5 +1,6 @@
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use crossbeam_channel::{select, select_biased, Receiver, Sender};
 use dronegowski_utils::functions::{assembler, deserialize_message, fragment_message, generate_unique_id};
 use wg_2024::controller::{DroneCommand, DroneEvent};
@@ -58,17 +59,16 @@ impl DronegowskiClient {
                     if let Ok(command) = command_res {
                         log::info!("Client {}: Received ClientCommand: {:?}", self.id, command); // Log the received command
 
-                        self.server_discovery();
-
                         match command {
                             ClientCommand::RemoveSender(nodeId) => {
                                 log::info!("Client {}: Removing sender: {}", self.id, nodeId);
-                                // Add logic to actually remove the sender (if needed for Client)
+                                self.remove_neighbor(&nodeId);
+                                self.server_discovery();
                             }
                             ClientCommand::AddSender(nodeId, packet_sender) => {
                                 log::info!("Client {}: Adding sender: {} -> {:?}",self.id, nodeId, packet_sender);
-                                // Add logic to add the new sender.
-                                self.packet_send.insert(nodeId, packet_sender);
+                                self.add_neighbor(nodeId, packet_sender);
+                                self.server_discovery();
                             }
                             ClientCommand::ServerType(nodeId) => {
                                 log::info!("Client {}: Requesting ServerType from Server: {}", self.id, nodeId);
@@ -98,6 +98,10 @@ impl DronegowskiClient {
                                 log::info!("Client {}: Sending message to client {} via server {}: {}", self.id, clientId, nodeId, message);
                                 self.send_message(&nodeId, clientId, message);
                             }
+                            ClientCommand::RequestNetworkDiscovery => {
+                                log::info!("Client {}: Requesting Network Discovery", self.id);
+                                self.server_discovery();
+                            }
                         }
                     }
                 },
@@ -107,7 +111,7 @@ impl DronegowskiClient {
     }
 
     fn handle_packet(&mut self, packet: Packet) {
-        log::info!("Client {}: Received packet: {:?}", self.id, packet); // Log the received packet
+        log::info!("Client {}: Received packet: {:?}", self.id, packet);
 
         match packet.pack_type {
             PacketType::MsgFragment(fragment) => {
@@ -221,43 +225,8 @@ impl DronegowskiClient {
                 log::info!("Client {}: Received FloodResponse: {:?}", self.id, flood_response);
                 self.update_graph(flood_response.path_trace);
             }
-            PacketType::FloodRequest(mut flood_request) => { // Make flood_request mutable
-                log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
-
-                // 1. Add self to the path_trace.
-                flood_request.path_trace.push((self.id, NodeType::Client));
-
-                // 2. Create the FloodResponse.
-                let flood_response = FloodResponse {
-                    flood_id: flood_request.flood_id,
-                    path_trace: flood_request.path_trace.clone(), // Use the updated path_trace
-                };
-
-                // 3.  Get the *source* of the FloodRequest (who sent it to *us*).
-                //     This is now guaranteed to exist because of our fix in the Drone.
-                let source_id = packet.routing_header.source().expect("FloodRequest must have a source");
-
-                // 4. Create the packet with the *reversed* path.
-                let response_packet = Packet {
-                    pack_type: PacketType::FloodResponse(flood_response),
-                    routing_header: SourceRoutingHeader {
-                        hop_index: 0, // Reset hop_index for the response
-                        hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(),
-                    },
-                    session_id: packet.session_id, // Use the same session ID
-                };
-
-                // 5. Send the response packet back to the source.
-                if let Some(sender) = self.packet_send.get(&source_id) {
-                    //We use the send function with timeout
-                    if let Err(_) = self.send_message_with_timeout(response_packet, source_id, std::time::Duration::from_millis(500)){
-                        log::warn!("Client {}: Timeout sending FloodResponse to {}", self.id, source_id);
-                        self.server_discovery(); // Trigger network update
-                    }
-                    log::info!("Client {}: Sent FloodResponse back to {}", self.id, source_id);
-                } else {
-                    log::error!("Client {}: No sender found for node {}", self.id, source_id);
-                }
+            PacketType::FloodRequest(mut flood_request) => {
+                self.handle_flood_request(flood_request, packet.clone());
             },
             Ack(session_id) => {
                 log::info!("Client {}: Received Ack for session: {}", self.id, session_id);
@@ -266,8 +235,6 @@ impl DronegowskiClient {
             PacketType::Nack(_) => {}
         }
     }
-
-
 
     pub fn switch_client_type(&mut self) {
         log::info!(
@@ -490,4 +457,79 @@ impl DronegowskiClient {
             }
         }
     }
+
+    fn add_neighbor(&mut self, node_id: NodeId, sender: Sender<Packet>) {
+        if let std::collections::hash_map::Entry::Vacant(e) = self.packet_send.entry(node_id) {
+            e.insert(sender);
+        } else {
+            panic!("Sender for node {node_id} already stored in the map!");
+        }
+    }
+
+    fn remove_neighbor(&mut self, node_id: &NodeId) {
+        if self.packet_send.contains_key(node_id) {
+            self.packet_send.remove(node_id);
+        } else {
+            panic!("the {} is not neighbour of the drone {}", node_id, self.id);
+        }
+    }
+
+    fn handle_flood_request(&mut self, mut flood_request: FloodRequest, packet: Packet) {
+        log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
+
+        // 1. Add self to the path_trace.
+        flood_request.path_trace.push((self.id, NodeType::Client));
+
+        // 2. Create the FloodResponse.
+        let flood_response = FloodResponse {
+            flood_id: flood_request.flood_id,
+            path_trace: flood_request.path_trace.clone(),
+        };
+
+        // 3. Get the *source* of the FloodRequest.
+        let source_id = packet.routing_header.source().expect("FloodRequest must have a source");
+
+        // 4. Create the packet with the *reversed* path.
+        let response_packet = Packet {
+            pack_type: PacketType::FloodResponse(flood_response),
+            routing_header: SourceRoutingHeader {
+                hop_index: 0, // Reset hop_index
+                hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(),
+            },
+            session_id: packet.session_id,
+        };
+
+        // 5. Send the response packet back to the source (with timeout).
+        if let Some(sender) = self.packet_send.get(&source_id) {
+            if let Err(_) = self.send_message_with_timeout(response_packet, source_id, Duration::from_millis(500)) {
+                log::warn!("Client {}: Timeout sending FloodResponse to {}", self.id, source_id);
+                self.server_discovery(); // Trigger network update on timeout
+            } else {
+                log::info!("Client {}: Sent FloodResponse back to {}", self.id, source_id);
+                // Update the graph *after* successfully sending the response.
+                self.update_graph(flood_request.path_trace);
+            }
+        } else {
+            log::error!("Client {}: No sender found for node {}", self.id, source_id);
+        }
+    }
+
+    fn send_message_with_timeout(&self, packet: Packet, recipient_id: NodeId, timeout: Duration) -> Result<(), ()> {
+        if let Some(sender) = self.packet_send.get(&recipient_id) {
+            match sender.send_timeout(packet.clone(), timeout) { // Use send_timeout
+                Ok(()) => {
+                    let _ = self.sim_controller_send.send(ClientEvent::PacketSent(packet));
+                    Ok(())
+                },
+                Err(_) => {  //  The specific error type is SendTimeoutError
+                    log::warn!("Client {}: Timeout sending packet to {}", self.id, recipient_id);
+                    Err(()) // Indicate timeout
+                }
+            }
+        } else {
+            log::warn!("Client {}: No sender found for node {}", self.id, recipient_id);
+            Err(()) // Indicate no sender
+        }
+    }
+
 }
