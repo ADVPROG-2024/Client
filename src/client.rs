@@ -221,10 +221,45 @@ impl DronegowskiClient {
                 log::info!("Client {}: Received FloodResponse: {:?}", self.id, flood_response);
                 self.update_graph(flood_response.path_trace);
             }
-            PacketType::FloodRequest(flood_request) => {
+            PacketType::FloodRequest(mut flood_request) => { // Make flood_request mutable
                 log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
-            }
-            PacketType::Ack(session_id) => {
+
+                // 1. Add self to the path_trace.
+                flood_request.path_trace.push((self.id, NodeType::Client));
+
+                // 2. Create the FloodResponse.
+                let flood_response = FloodResponse {
+                    flood_id: flood_request.flood_id,
+                    path_trace: flood_request.path_trace.clone(), // Use the updated path_trace
+                };
+
+                // 3.  Get the *source* of the FloodRequest (who sent it to *us*).
+                //     This is now guaranteed to exist because of our fix in the Drone.
+                let source_id = packet.routing_header.source().expect("FloodRequest must have a source");
+
+                // 4. Create the packet with the *reversed* path.
+                let response_packet = Packet {
+                    pack_type: PacketType::FloodResponse(flood_response),
+                    routing_header: SourceRoutingHeader {
+                        hop_index: 0, // Reset hop_index for the response
+                        hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(),
+                    },
+                    session_id: packet.session_id, // Use the same session ID
+                };
+
+                // 5. Send the response packet back to the source.
+                if let Some(sender) = self.packet_send.get(&source_id) {
+                    //We use the send function with timeout
+                    if let Err(_) = self.send_message_with_timeout(response_packet, source_id, std::time::Duration::from_millis(500)){
+                        log::warn!("Client {}: Timeout sending FloodResponse to {}", self.id, source_id);
+                        self.server_discovery(); // Trigger network update
+                    }
+                    log::info!("Client {}: Sent FloodResponse back to {}", self.id, source_id);
+                } else {
+                    log::error!("Client {}: No sender found for node {}", self.id, source_id);
+                }
+            },
+            Ack(session_id) => {
                 log::info!("Client {}: Received Ack for session: {}", self.id, session_id);
                 // Handle ACK (if you are using ACKs)
             }
