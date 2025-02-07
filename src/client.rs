@@ -110,7 +110,7 @@ impl DronegowskiClient {
         }
     }
 
-    fn handle_packet(&mut self, packet: Packet) {
+    fn handle_packet(&mut self, mut packet: Packet) {
         log::info!("Client {}: Received packet: {:?}", self.id, packet);
 
         match packet.pack_type {
@@ -225,8 +225,8 @@ impl DronegowskiClient {
                 log::info!("Client {}: Received FloodResponse: {:?}", self.id, flood_response);
                 self.update_graph(flood_response.path_trace);
             }
-            PacketType::FloodRequest(flood_request) => {
-                self.handle_flood_request(flood_request, packet.clone());
+            PacketType::FloodRequest(ref mut flood_request) => {
+                self.handle_flood_request(&mut flood_request.clone(), packet.clone());
             },
             Ack(session_id) => {
                 log::info!("Client {}: Received Ack for session: {}", self.id, session_id);
@@ -474,7 +474,7 @@ impl DronegowskiClient {
         }
     }
 
-    fn handle_flood_request(&mut self, mut flood_request: FloodRequest, packet: Packet) {
+    fn handle_flood_request(&mut self, flood_request: &mut FloodRequest, packet: Packet) {
         log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
 
         // 1. Add self to the path_trace.
@@ -507,7 +507,7 @@ impl DronegowskiClient {
             } else {
                 log::info!("Client {}: Sent FloodResponse back to {}", self.id, source_id);
                 // Update the graph *after* successfully sending the response.
-                self.update_graph(flood_request.path_trace);
+                self.update_graph(flood_request.path_trace.clone());
             }
         } else {
             log::error!("Client {}: No sender found for node {}", self.id, source_id);
