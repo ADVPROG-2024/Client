@@ -29,7 +29,7 @@ impl DronegowskiClient {
             id
         );
 
-        Self {
+        let mut client = Self {
             id,
             sim_controller_send,
             sim_controller_recv,
@@ -39,7 +39,11 @@ impl DronegowskiClient {
             message_storage: HashMap::new(),
             topology: HashSet::new(),
             node_types: HashMap::new(),
-        }
+        };
+
+        client.server_discovery();
+
+        client
     }
 
     pub fn run(&mut self) {
@@ -54,6 +58,8 @@ impl DronegowskiClient {
                     if let Ok(command) = command_res {
                         log::info!("Client {}: Received ClientCommand: {:?}", self.id, command); // Log the received command
 
+                        self.server_discovery();
+
                         match command {
                             ClientCommand::RemoveSender(nodeId) => {
                                 log::info!("Client {}: Removing sender: {}", self.id, nodeId);
@@ -65,7 +71,7 @@ impl DronegowskiClient {
                                 self.packet_send.insert(nodeId, packet_sender);
                             }
                             ClientCommand::ServerType(nodeId) => {
-                                log::info!("Client {}: Requesting ServerType from: {}", self.id, nodeId);
+                                log::info!("Client {}: Requesting ServerType from Server: {}", self.id, nodeId);
                                 self.ask_server_type(&nodeId);
                             }
                             ClientCommand::FilesList(nodeId) => {
