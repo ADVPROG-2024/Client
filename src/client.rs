@@ -528,7 +528,7 @@ impl DronegowskiClient {
                 self.id,
                 source_id
             );
-            self.server_discovery(); // Trigger network rediscovery on failure.
+            //self.server_discovery(); // Trigger network rediscovery on failure.
         }
     }
 
