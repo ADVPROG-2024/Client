@@ -477,100 +477,49 @@ impl DronegowskiClient {
 
     // Handles FloodRequest packets.
     fn handle_flood_request(&mut self, packet: Packet) {
-        let mut flood_request = match packet.pack_type {
+        let flood_request = match packet.pack_type {
             PacketType::FloodRequest(req) => req,
-            _ => return,
+            _ => return, // Ignore non-FloodRequest packets.
         };
 
         log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
 
-        // Controllo del ciclo: Se il flood_id è già presente nel mio registro,
-        // significa che ho già gestito questa richiesta e devo rispondere
+        // Get the source ID of the FloodRequest.
         let source_id = match packet.routing_header.source() {
             Some(id) => id,
             None => {
                 log::warn!("Client {}: FloodRequest without source", self.id);
-                return;
+                return; // Ignore requests without a source.
             }
         };
-        //Check if is already present, if yes we have already managed
-        if flood_request.path_trace.iter().any(|&(id, _)| id == self.id) {
-            //Se contiene già se stesso non deve aggiungere nulla.
-            log::info!("Client {}: Received FloodRequest: {:?} already managed", self.id, flood_request);
-            let flood_response = FloodResponse {
-                flood_id: flood_request.flood_id,
-                path_trace: flood_request.path_trace.clone(),
-            };
-            let response_packet = Packet {
-                pack_type: PacketType::FloodResponse(flood_response),
-                routing_header: SourceRoutingHeader {
-                    hop_index: 0,
-                    hops: flood_request
-                        .path_trace
-                        .iter()
-                        .rev()
-                        .map(|(id, _)| *id)
-                        .collect(),
-                },
-                session_id: packet.session_id,
-            };
 
-            self.send_packet_and_notify(response_packet, source_id);
-            return;
-        }
-
-
-        // Aggiungo me stesso al path_trace DOPO il controllo del ciclo.
-        flood_request.path_trace.push((self.id, NodeType::Client));
-
-        // Aggiorno il grafo *prima* di inoltrare o rispondere, questo deve succedere per forza prima
+        // 1. Update the graph *immediately* upon receiving the FloodRequest.
         self.update_graph(flood_request.path_trace.clone());
 
-        //inoltro solo se non è il server a mandare il flood request
-        if !matches!(self.node_types.get(&source_id), Some(NodeType::Server)) {
-            // Inoltro la richiesta ai miei vicini, *escluso* il mittente originale.
-            for (&node_id, sender) in &self.packet_send {
-                if node_id != source_id {
-                    log::info!("Client {}: Forwarding FloodRequest to {}", self.id, node_id);
-                    let mut forwarded_packet = Packet {
-                        pack_type: PacketType::FloodRequest(flood_request.clone()),
-                        routing_header: SourceRoutingHeader {
-                            hop_index: 0, // Resetta l'hop index per l'inoltro
-                            hops: vec![self.id, node_id], // Percorso diretto per l'inoltro
-                        },
-                        session_id: packet.session_id,
-                    };
+        // 2. Create a *new* path trace for the response.  This includes the client.
+        let mut response_path_trace = flood_request.path_trace.clone();
+        response_path_trace.push((self.id, NodeType::Client)); // Add the client to the response path.
 
-
-                    self.send_packet_and_notify(forwarded_packet, node_id); //Inoltro
-                }
-            }
-        }
-
-
-
-        // Creo e invio la FloodResponse *indietro* al mittente originale.
+        // 3. Create the FloodResponse.
         let flood_response = FloodResponse {
             flood_id: flood_request.flood_id,
-            path_trace: flood_request.path_trace.clone(),
+            path_trace: response_path_trace, // Use the *new* path trace.
         };
 
+        // 4. Create the response packet, reversing the *original* path_trace.
         let response_packet = Packet {
             pack_type: PacketType::FloodResponse(flood_response),
             routing_header: SourceRoutingHeader {
                 hop_index: 0,
-                hops: flood_request
-                    .path_trace
-                    .iter()
-                    .rev()
-                    .map(|(id, _)| *id)
-                    .collect(),
+                hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(),
             },
             session_id: packet.session_id,
         };
 
+        // 5. Send the response back to the source.
         self.send_packet_and_notify(response_packet, source_id);
 
+        // Clients do *not* forward FloodRequests.  They are endpoints.
     }
 
     // Sends a message with a timeout.
