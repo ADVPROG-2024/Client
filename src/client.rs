@@ -284,7 +284,7 @@ impl DronegowskiClient {
     /// Gestisce un messaggio ricevuto da un server.
     fn handle_server_message(&mut self, src_id: NodeId, client_message: ClientMessages) {
         match client_message {
-            TestMessage::WebClientMessages(server_message) => match server_message {
+            ClientMessages::ServerMessages(server_message) => match server_message {
                 ServerMessages::ServerType(server_type) => {
                     info!("Client {}: Ricevuto ServerType: {:?}", self.id, server_type);
                     let _ = self
