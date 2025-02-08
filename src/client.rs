@@ -149,8 +149,7 @@ impl DronegowskiClient {
             }
             PacketType::Nack(_) => {
                 // I pacchetti Nack non vengono gestiti al momento. Potrebbe essere necessario implementarli per la gestione degli errori.
-                debug!("Client {}: Ricevuto Nack (non gestito)", self.id);
-
+                info!("Client {}: Ricevuto Nack (non gestito)", self.id);
             }
         }
     }
@@ -285,7 +284,7 @@ impl DronegowskiClient {
     /// Gestisce un messaggio ricevuto da un server.
     fn handle_server_message(&mut self, src_id: NodeId, client_message: ClientMessages) {
         match client_message {
-            ClientMessages::ServerMessages(server_message) => match server_message {
+            TestMessage::WebClientMessages(server_message) => match server_message {
                 ServerMessages::ServerType(server_type) => {
                     info!("Client {}: Ricevuto ServerType: {:?}", self.id, server_type);
                     let _ = self
