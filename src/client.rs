@@ -636,7 +636,7 @@ impl DronegowskiClient {
 
         // Crea il pacchetto di risposta.
         let response_packet = Packet {
-            pack_type: PacketType::FloodResponse(flood_response),
+            pack_type: PacketType::FloodResponse(flood_response.clone()),
             routing_header: SourceRoutingHeader {
                 hop_index: 0,
                 // Inverte il path_trace per tornare al mittente.
@@ -645,10 +645,11 @@ impl DronegowskiClient {
             session_id: packet.session_id,
         };
 
-        info!("Client {}: Invio di FloodResponse a {}", self.id, source_id);
+        info!("Client {}: Invio di FloodResponse a {}, fd: {:?}", self.id, source_id, flood_response);
 
         // Invia il FloodResponse al mittente.
         let next_node = response_packet.routing_header.hops[1];
+        info!("Client {}: Invio di FloodResponse tramite {}", self.id, next_node);
         self.send_packet_and_notify(response_packet, next_node);
     }
 
