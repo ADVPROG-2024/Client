@@ -1,16 +1,10 @@
 use std::collections::HashMap;
-use std::fs::File;
 use std::thread;
-use std::time::Duration;
 use crossbeam_channel::unbounded;
-use log::LevelFilter;
-use simplelog::{ConfigBuilder, WriteLogger};
-use wg_2024::packet::{Fragment, Packet, PacketType};
-use wg_2024::network::{NodeId, SourceRoutingHeader};
+use wg_2024::packet::{Packet};
 use client::{DronegowskiClient};
-use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientType, TestMessage};
+use dronegowski_utils::hosts::{ClientCommand, ClientEvent, ClientType};
 use dronegowski_utils::functions::simple_log;
-use wg_2024::packet::PacketType::MsgFragment;
 
 fn main() {
 
@@ -18,12 +12,12 @@ fn main() {
     simple_log();
 
     // Creazione dei canali
-    let (sim_controller_send, sim_controller_recv) = unbounded::<ClientEvent>();
-    let (send_controller, controller_recv) = unbounded::<ClientCommand>();
-    let (packet_send, packet_recv) = unbounded::<Packet>();
+    let (sim_controller_send, _) = unbounded::<ClientEvent>();
+    let (_, controller_recv) = unbounded::<ClientCommand>();
+    let (_, packet_recv) = unbounded::<Packet>();
 
     // Mappa dei vicini (drone collegati)
-    let (neighbor_send, neighbor_recv) = unbounded();
+    let (neighbor_send, _) = unbounded();
     let mut senders = HashMap::new();
     senders.insert(2, neighbor_send); // Drone 2 come vicino
 
