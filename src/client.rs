@@ -648,7 +648,8 @@ impl DronegowskiClient {
         info!("Client {}: Invio di FloodResponse a {}", self.id, source_id);
 
         // Invia il FloodResponse al mittente.
-        self.send_packet_and_notify(response_packet, source_id);
+        let next_node = response_packet.routing_header.hops[1];
+        self.send_packet_and_notify(response_packet, next_node);
     }
 
     // Alternativa alla send_packet_and_notify con timeout, non utilizzata nel codice
