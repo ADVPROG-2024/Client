@@ -1,18 +1,14 @@
-use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::Duration;
 
-use crossbeam_channel::{select, select_biased, Receiver, Sender};
+use crossbeam_channel::{select_biased, Receiver, Sender};
 use dronegowski_utils::functions::{
     assembler, deserialize_message, fragment_message, generate_unique_id,
 };
 use dronegowski_utils::hosts::{
     ClientCommand, ClientEvent, ClientMessages, ClientType, ServerMessages, TestMessage,
 };
-use serde::Serialize;
-use wg_2024::controller::{DroneCommand, DroneEvent};
 use wg_2024::network::{NodeId, SourceRoutingHeader};
-use wg_2024::packet::{FloodRequest, FloodResponse, Fragment, NodeType, Packet, PacketType};
+use wg_2024::packet::{FloodRequest, FloodResponse, NodeType, Packet, PacketType};
 use wg_2024::packet::PacketType::Ack;
 
 #[derive(Debug)]
@@ -37,7 +33,7 @@ impl DronegowskiClient {
         packet_send: HashMap<NodeId, Sender<Packet>>,
         client_type: ClientType,
     ) -> Self {
-        let mut client = Self {
+        let client = Self {
             id,
             sim_controller_send,
             sim_controller_recv,
@@ -163,8 +159,7 @@ impl DronegowskiClient {
 
             let all_fragments_received = fragments_received.iter().all(|&received| received);
 
-            let percentage = (fragments_received.iter().filter(|&&r| r).count() * 100)
-                / fragment.total_n_fragments as usize;
+            let percentage = (fragments_received.iter().filter(|&&r| r).count() * 100) / fragment.total_n_fragments as usize;
             log::info!(
                 "Client {}: Fragment {}/{} for session {} from {}. {}% complete.",
                 self.id,
@@ -305,7 +300,7 @@ impl DronegowskiClient {
             path_trace: vec![(self.id, NodeType::Client)],
         };
 
-        for (&node_id, sender) in &self.packet_send {
+        for (&node_id, _) in &self.packet_send {
             log::info!("Sending FloodRequest to node {}", node_id);
             let packet = Packet {
                 pack_type: PacketType::FloodRequest(flood_request.clone()),
@@ -429,7 +424,7 @@ impl DronegowskiClient {
             let fragments = fragment_message(&serialized_message, path.clone(), generate_unique_id());
 
             if let (Some(next_hop), true) = (path.get(1), path.len() > 1) {
-                if let Some(sender) = self.packet_send.get(next_hop) {
+                if let Some(_) = self.packet_send.get(next_hop) {
                     for packet in fragments {
                         log::info!("self.send_packet_and_notify(packet, *next_hop);");
                         self.send_packet_and_notify(packet, *next_hop);
@@ -455,7 +450,14 @@ impl DronegowskiClient {
                     e
                 );
             } else {
-                log::info!("Il messaggio è stato mandato ora cazzi tuoi negro");
+
+                log::info!(
+                    "Client {}: Packet send to {}: deve arrivare a {}",
+                    self.id,
+                    recipient_id,
+                    packet.routing_header.hops.last().unwrap(),
+                );
+
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::PacketSent(packet));
@@ -478,6 +480,8 @@ impl DronegowskiClient {
     }
 
     fn handle_flood_request(&mut self, packet: Packet) {
+
+        // Ricevo il FloodRequest
         let flood_request = match packet.pack_type {
             PacketType::FloodRequest(req) => req,
             _ => return,
@@ -485,6 +489,7 @@ impl DronegowskiClient {
 
         log::info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
 
+        // Mi ricavo il source_id
         let source_id = match packet.routing_header.source() {
             Some(id) => id,
             None => {
@@ -493,8 +498,10 @@ impl DronegowskiClient {
             }
         };
 
+        // Aggiorno il grafo con le conoscenze date dal path_trace
         self.update_graph(flood_request.path_trace.clone());
 
+        // Preparo il response path trace e inserisco il nodo del client
         let mut response_path_trace = flood_request.path_trace.clone();
         response_path_trace.push((self.id, NodeType::Client));
 
@@ -512,36 +519,37 @@ impl DronegowskiClient {
             session_id: packet.session_id,
         };
 
+        // Invio il FloodResponse al source_id
         self.send_packet_and_notify(response_packet, source_id);
     }
 
-    fn send_message_with_timeout(
-        &self,
-        packet: Packet,
-        recipient_id: NodeId,
-        timeout: Duration,
-    ) -> Result<(), ()> {
-        match self.packet_send.get(&recipient_id) {
-            Some(sender) => match sender.send_timeout(packet.clone(), timeout) {
-                Ok(()) => {
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::PacketSent(packet));
-                    Ok(())
-                }
-                Err(_) => {
-                    log::warn!(
-                        "Client {}: Timeout sending packet to {}",
-                        self.id,
-                        recipient_id
-                    );
-                    Err(())
-                }
-            },
-            None => {
-                log::warn!("Client {}: No sender for node {}", self.id, recipient_id);
-                Err(())
-            }
-        }
-    }
+    // fn send_message_with_timeout(
+    //     &self,
+    //     packet: Packet,
+    //     recipient_id: NodeId,
+    //     timeout: Duration,
+    // ) -> Result<(), ()> {
+    //     match self.packet_send.get(&recipient_id) {
+    //         Some(sender) => match sender.send_timeout(packet.clone(), timeout) {
+    //             Ok(()) => {
+    //                 let _ = self
+    //                     .sim_controller_send
+    //                     .send(ClientEvent::PacketSent(packet));
+    //                 Ok(())
+    //             }
+    //             Err(_) => {
+    //                 log::warn!(
+    //                     "Client {}: Timeout sending packet to {}",
+    //                     self.id,
+    //                     recipient_id
+    //                 );
+    //                 Err(())
+    //             }
+    //         },
+    //         None => {
+    //             log::warn!("Client {}: No sender for node {}", self.id, recipient_id);
+    //             Err(())
+    //         }
+    //     }
+    // }
 }
