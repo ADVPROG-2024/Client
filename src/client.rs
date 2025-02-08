@@ -252,9 +252,9 @@ impl DronegowskiClient {
     fn process_reassembled_message(&mut self, session_id: u64, src_id: NodeId, message_data: &[u8]) {
         // Deserializza il messaggio.
         match bincode::deserialize(message_data) {
-            Ok(TestMessage::WebServerMessages(client_message)) => {
+            Ok(TestMessage::WebClientMessages(server_message)) => {
                 // Se il messaggio è un messaggio del web server, lo gestisce.
-                self.handle_server_message(src_id, client_message);
+                self.handle_server_message(src_id, server_message);
             }
             Ok(deserialized_message) => {
                 info!(
@@ -282,7 +282,7 @@ impl DronegowskiClient {
     }
 
     /// Gestisce un messaggio ricevuto da un server.
-    fn handle_server_message(&mut self, src_id: NodeId, client_message: ClientMessages) {
+    fn handle_server_message(&mut self, src_id: NodeId, client_message: ServerMessages) {
         match client_message {
             ClientMessages::ServerMessages(server_message) => match server_message {
                 ServerMessages::ServerType(server_type) => {
