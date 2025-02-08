@@ -265,7 +265,7 @@ impl DronegowskiClient {
                     src_id,
                     deserialized_message
                 );
-                // Invia il messaggio ricevuto al controllore della simulazione.
+                // Invia il messaggio ricevuto al simulation controller.
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::MessageReceived(deserialized_message));
