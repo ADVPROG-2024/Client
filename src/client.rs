@@ -315,7 +315,7 @@ impl DronegowskiClient {
                 }
                 ServerMessages::Media(media_data) => {
                     info!(
-                        "Client {}: Ricevuti dati multimediali (dimensione: {} bytes)",
+                        "Client {}: Ricevuti i dati multimediali (dimensione: {} bytes)",
                         self.id,
                         media_data.len()
                     );
