@@ -532,9 +532,9 @@ impl DronegowskiClient {
         if let Some(path) = self.compute_route(target_id) {
             info!("Client {}: Percorso trovato correttamente", self.id);
             // Serializza il messaggio.
-            let serialized_message = bincode::serialize(&message).expect("Serializzazione fallita");
+            //let serialized_message = bincode::serialize(&message).expect("Serializzazione fallita");
             // Frammenta il messaggio.
-            let fragments = fragment_message(&serialized_message, path.clone(), generate_unique_id());
+            let fragments = fragment_message(&message, path.clone(), generate_unique_id());
 
             // Invia i frammenti al primo hop del percorso.
             if let (Some(next_hop), true) = (path.get(1), path.len() > 1) {
