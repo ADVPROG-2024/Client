@@ -455,6 +455,7 @@ impl DronegowskiClient {
                     e
                 );
             } else {
+                log::info!("Il messaggio è stato mandato ora cazzi tuoi negro");
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::PacketSent(packet));
