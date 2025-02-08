@@ -282,80 +282,76 @@ impl DronegowskiClient {
     }
 
     /// Gestisce un messaggio ricevuto da un server.
-    fn handle_server_message(&mut self, src_id: NodeId, client_message: ServerMessages) {
-        match client_message {
-            ClientMessages::ServerMessages(server_message) => match server_message {
-                ServerMessages::ServerType(server_type) => {
-                    info!("Client {}: Ricevuto ServerType: {:?}", self.id, server_type);
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::ServerTypeReceived(src_id, server_type));
-                }
-                ServerMessages::ClientList(clients) => {
-                    info!("Client {}: Ricevuto ClientList: {:?}", self.id, clients);
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::ClientListReceived(src_id, clients));
-                }
-                ServerMessages::FilesList(files) => {
-                    info!("Client {}: Ricevuto FilesList: {:?}", self.id, files);
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::FilesListReceived(src_id, files));
-                }
-                ServerMessages::File(file_data) => {
-                    info!(
-                        "Client {}: Ricevuti dati del file (dimensione: {} bytes)",
-                        self.id,
-                        file_data.text.len()
-                    );
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::FileReceived(src_id, file_data.text));
-                }
-                ServerMessages::Media(media_data) => {
-                    info!(
-                        "Client {}: Ricevuti i dati multimediali (dimensione: {} bytes)",
-                        self.id,
-                        media_data.len()
-                    );
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::MediaReceived(src_id, media_data));
-                }
-                ServerMessages::MessageFrom(from_id, message) => {
-                    info!(
-                        "Client {}: Ricevuto MessageFrom: {} da {}",
-                        self.id,
-                        message,
-                        from_id
-                    );
-                    let _ = self.sim_controller_send.send(ClientEvent::MessageFromReceived(
-                        src_id, from_id, message,
-                    ));
-                }
-                ServerMessages::RegistrationOk => {
-                    info!("Client {}: Ricevuto RegistrationOk", self.id);
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::RegistrationOk(src_id));
-                }
-                ServerMessages::RegistrationError(error) => {
-                    info!(
-                        "Client {}: Ricevuto RegistrationError, causa: {}",
-                        self.id,
-                        error
-                    );
-                    let _ = self
-                        .sim_controller_send
-                        .send(ClientEvent::RegistrationError(src_id));
-                }
-                other => {
-                    debug!("Client {}: Ricevuto messaggio server non gestito: {:?}", self.id, other);
-                }
-            },
+    fn handle_server_message(&mut self, src_id: NodeId, server_message: ServerMessages) {
+
+         match server_message {
+            ServerMessages::ServerType(server_type) => {
+                info!("Client {}: Ricevuto ServerType: {:?}", self.id, server_type);
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::ServerTypeReceived(src_id, server_type));
+            }
+            ServerMessages::ClientList(clients) => {
+                info!("Client {}: Ricevuto ClientList: {:?}", self.id, clients);
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::ClientListReceived(src_id, clients));
+            }
+            ServerMessages::FilesList(files) => {
+                info!("Client {}: Ricevuto FilesList: {:?}", self.id, files);
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::FilesListReceived(src_id, files));
+            }
+            ServerMessages::File(file_data) => {
+                info!(
+                    "Client {}: Ricevuti dati del file (dimensione: {} bytes)",
+                    self.id,
+                    file_data.text.len()
+                );
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::FileReceived(src_id, file_data.text));
+            }
+            ServerMessages::Media(media_data) => {
+                info!(
+                    "Client {}: Ricevuti i dati multimediali (dimensione: {} bytes)",
+                    self.id,
+                    media_data.len()
+                );
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::MediaReceived(src_id, media_data));
+            }
+            ServerMessages::MessageFrom(from_id, message) => {
+                info!(
+                    "Client {}: Ricevuto MessageFrom: {} da {}",
+                    self.id,
+                    message,
+                    from_id
+                );
+                let _ = self.sim_controller_send.send(ClientEvent::MessageFromReceived(
+                    src_id, from_id, message,
+                ));
+            }
+            ServerMessages::RegistrationOk => {
+                info!("Client {}: Ricevuto RegistrationOk", self.id);
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::RegistrationOk(src_id));
+            }
+            ServerMessages::RegistrationError(error) => {
+                info!(
+                    "Client {}: Ricevuto RegistrationError, causa: {}",
+                    self.id,
+                    error
+                );
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::RegistrationError(src_id));
+            }
             other => {
-                debug!("Client {}: Ricevuto messaggio client non gestito: {:?}", self.id, other)
+                debug!("Client {}: Ricevuto messaggio server non gestito: {:?}", self.id, other);
             }
         }
     }
