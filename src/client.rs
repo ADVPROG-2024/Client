@@ -424,12 +424,14 @@ impl DronegowskiClient {
 
     fn send_message_to_node(&self, target_id: &NodeId, message: TestMessage) {
         if let Some(path) = self.compute_route(target_id) {
+            log::info!("Sto per mandare il messaggio, porco dio");
             let serialized_message = bincode::serialize(&message).expect("Serialization failed");
             let fragments = fragment_message(&serialized_message, path.clone(), generate_unique_id());
 
             if let (Some(next_hop), true) = (path.get(1), path.len() > 1) {
                 if let Some(sender) = self.packet_send.get(next_hop) {
                     for packet in fragments {
+                        log::info!("self.send_packet_and_notify(packet, *next_hop);");
                         self.send_packet_and_notify(packet, *next_hop);
                     }
                 } else {
