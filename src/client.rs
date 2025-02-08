@@ -645,7 +645,7 @@ impl DronegowskiClient {
             session_id: packet.session_id,
         };
 
-        info!("Client {}: Invio di FloodResponse a {}, fd: {:?}", self.id, source_id, flood_response);
+        info!("Client {}: Invio di FloodResponse a {}, response packet: {:?}", self.id, source_id, response_packet);
 
         // Invia il FloodResponse al mittente.
         let next_node = response_packet.routing_header.hops[1];
