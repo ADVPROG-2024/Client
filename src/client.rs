@@ -10,7 +10,6 @@ use dronegowski_utils::hosts::{
 use log::{debug, error, info, warn};
 use wg_2024::network::{NodeId, SourceRoutingHeader};
 use wg_2024::packet::{FloodRequest, FloodResponse, Nack, NackType, NodeType, Packet, PacketType};
-use wg_2024::packet::PacketType::Ack;
 
 /// `DronegowskiClient` represents a client within the simulation.
 /// It manages communication with the simulator, sending and receiving packets,
@@ -20,24 +19,25 @@ pub struct DronegowskiClient {
     /// Unique identifier of the client.
     pub id: NodeId,
     /// Channel to send events to the simulation controller.
-    sim_controller_send: Sender<ClientEvent>,
+    pub sim_controller_send: Sender<ClientEvent>,
     /// Channel to receive commands from the simulation controller.
-    sim_controller_recv: Receiver<ClientCommand>,
+    pub sim_controller_recv: Receiver<ClientCommand>,
     /// Channel to receive packets from the network.
-    packet_recv: Receiver<Packet>,
+    pub packet_recv: Receiver<Packet>,
     /// Map associating each node with a channel to send packets to it.
-    packet_send: HashMap<NodeId, Sender<Packet>>,
+    pub packet_send: HashMap<NodeId, Sender<Packet>>,
     /// Type of client (ChatClients or WebBrowsers).
     pub client_type: ClientType,
     /// Map that stores incoming message fragments for reassembly.
     /// The key is a tuple (session_id, sender), the value is a tuple (message data, vector of booleans indicating which fragments have arrived).
-    message_storage: HashMap<(usize, NodeId), (Vec<u8>, Vec<bool>)>,
+    pub message_storage: HashMap<(usize, NodeId), (Vec<u8>, Vec<bool>)>,
     /// Set of tuples (NodeId, NodeId) representing the network topology as seen by the client.
-    topology: HashSet<(NodeId, NodeId)>,
+    pub topology: HashSet<(NodeId, NodeId)>,
     /// Map associating each node with its type (Client, Server, Intermediate).
-    node_types: HashMap<NodeId, NodeType>,
+    pub node_types: HashMap<NodeId, NodeType>,
     // MESSAGE STORAGE
     pending_messages: HashMap<u64, Vec<Packet>>,
+    acked_fragments: HashMap<u64, HashSet<u64>>, // Nuovo campo per tracciare i frammenti confermati
     // MAP THAT KEEPS COUNT OF NACK OF TYPE DROPPED RECEIVED FOR A CERTAIN FRAGMENT
     nack_counter: HashMap<(u64, u64, NodeId), u8>,
     excluded_nodes: HashSet<NodeId>,
@@ -75,6 +75,7 @@ impl DronegowskiClient {
             pending_messages: HashMap::new(),
             nack_counter: HashMap::new(),
             excluded_nodes: HashSet::new(),
+            acked_fragments: HashMap::new(),
         };
 
         // Performs initial server discovery.
@@ -152,14 +153,31 @@ impl DronegowskiClient {
                 self.update_graph(flood_response.path_trace);
             }
             PacketType::FloodRequest(_) => self.handle_flood_request(packet),
-            Ack(session_id) => {
-                info!("Client {}: Received Ack for session: {}", self.id, session_id);
-                // EVERY TIME AN ACK ARRIVES, REMOVE FROM MESSAGE STORAGE
+            PacketType::Ack(ack) => {
+                info!("Client {}: Received Ack for fragment {}", self.id, ack.fragment_index);
+                let session_id = packet.session_id;
+                let fragment_index = ack.fragment_index;
+
+                // Rimuove le entry correlate dal nack_counter
+                self.nack_counter.retain(|(f_idx, s_id, _), _| !(*f_idx == fragment_index && *s_id == session_id));
+
+                // Aggiorna acked_fragments
+                let acked = self.acked_fragments.entry(session_id).or_default();
+                acked.insert(fragment_index);
+
+                // Verifica se tutti i frammenti sono stati confermati
+                if let Some(fragments) = self.pending_messages.get(&session_id) {
+                    let total_fragments = fragments.len() as u64;
+                    if acked.len() as u64 == total_fragments {
+                        self.pending_messages.remove(&session_id);
+                        self.acked_fragments.remove(&session_id);
+                        info!("Client {}: All fragments for session {} have been acknowledged", self.id, session_id);
+                    }
+                }
             }
             PacketType::Nack(ref nack) => {
                 // Nack packets are not handled at the moment. It might be necessary to implement them for error handling.
                 info!("Client {}: Received Nack (unhandled)", self.id);
-                info!("[NACK IMPLEMENTATION] Client {}: , packet.clone().routing_header.hops: {:?}", self.id, packet.clone().routing_header.hops);
                 let drop_drone = packet.clone().routing_header.hops[0];
                 // NACK HANDLING METHOD
                 self.handle_nack(nack.clone(), packet.session_id, drop_drone);
@@ -296,6 +314,10 @@ impl DronegowskiClient {
             fragment.total_n_fragments
         );
 
+        // Initialize ack_packet and next_hop outside the reassembled_data block
+        let mut ack_packet_option: Option<Packet> = None;
+        let mut next_hop_option: Option<NodeId> = None;
+
         // Logic for reassembling fragments.
         let reassembled_data = {
             let key = (packet.session_id as usize, src_id);
@@ -327,6 +349,28 @@ impl DronegowskiClient {
                 return;
             }
 
+            // Invia un Ack al mittente per confermare la ricezione del frammento
+            let reversed_hops: Vec<NodeId> = packet.routing_header.hops.iter().rev().cloned().collect();
+            let ack_routing_header = SourceRoutingHeader {
+                hop_index: 0,
+                hops: reversed_hops,
+            };
+
+            let ack_packet = Packet::new_ack(
+                ack_routing_header,
+                packet.session_id,
+                fragment.fragment_index,
+            );
+
+            if let Some(next_hop) = ack_packet.routing_header.hops.get(1).cloned() {
+                info!("Client {}: Sending Ack for fragment {} to {}", self.id, fragment.fragment_index, next_hop);
+                // Store ack_packet and next_hop for sending after mutable borrow ends
+                ack_packet_option = Some(ack_packet);
+                next_hop_option = Some(next_hop);
+            } else {
+                warn!("Client {}: No valid path to send Ack for fragment {}", self.id, fragment.fragment_index);
+            }
+
             // Checks if all fragments have been received.
             let all_fragments_received = fragments_received.iter().all(|&received| received);
 
@@ -351,6 +395,12 @@ impl DronegowskiClient {
                 None
             }
         };
+
+        // Send Ack packet after the mutable borrow of message_storage has ended
+        if let (Some(ack_packet), Some(next_hop)) = (ack_packet_option, next_hop_option) {
+            self.send_packet_and_notify(ack_packet, next_hop);
+        }
+
 
         // If the message has been reassembled, processes it.
         if let Some((session_id, message_data)) = reassembled_data {
