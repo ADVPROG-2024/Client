@@ -817,4 +817,10 @@ impl DronegowskiClient {
         info!("Client {}: Sending FloodResponse via {}", self.id, next_node);
         self.send_packet_and_notify(response_packet, next_node);
     }
+
+    fn handle_error(&mut self, error_msg: String) {
+        let _ = self.sim_controller_send.send(
+            ClientEvent::Error(self.id, error_msg)
+        );
+    }
 }
