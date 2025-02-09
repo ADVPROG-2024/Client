@@ -190,7 +190,7 @@ impl DronegowskiClient {
                                 if let Some(new_path) = self.compute_route_excluding(target_server) {
                                     let mut new_packet = packet.clone();
                                     new_packet.routing_header.hops = new_path;
-                                    new_packet.routing_header.hop_index = 0;
+                                    new_packet.routing_header.hop_index = 1;
 
                                     if let Some(next_hop) = new_packet.routing_header.hops.get(1) {
                                         info!("Client {}: Resending fragment {} via new path: {:?}",
