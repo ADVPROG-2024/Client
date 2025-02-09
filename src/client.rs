@@ -349,7 +349,7 @@ impl DronegowskiClient {
                 return;
             }
 
-            // Invia un Ack al mittente per confermare la ricezione del frammento
+            // Invia un Ack al mittente per confermare la ricezione del pacchetto/frammento
             let reversed_hops: Vec<NodeId> = packet.routing_header.hops.iter().rev().cloned().collect();
             let ack_routing_header = SourceRoutingHeader {
                 hop_index: 1,
