@@ -516,8 +516,18 @@ impl DronegowskiClient {
                     .sim_controller_send
                     .send(ClientEvent::RegistrationError(self.id, src_id));
             }
+            ServerMessages::Error(error) => {
+                info!(
+                    "Client {}: Received Error, cause: {}",
+                    self.id,
+                    error
+                );
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::Error(self.id, error));
+            }
             other => {
-                debug!("Client {}: Received unhandled server message: {:?}", self.id, other);
+                println!("Client {}: Received unhandled server message: {:?}", self.id, other);
             }
         }
     }
