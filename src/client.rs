@@ -97,14 +97,14 @@ impl DronegowskiClient {
                     if let Ok(packet) = packet_res {
                         self.handle_packet(packet);
                     } else {
-                        error!(target: &format!("client_{}", self.id), "Error receiving packet");
+                        error!("Client {}: Error receiving packet", self.id);
                     }
                 }
                 recv(self.sim_controller_recv) -> command_res => {
                     if let Ok(command) = command_res {
                         self.handle_client_command(command);
                     } else {
-                        error!(target: &format!("client_{}", self.id), "Error receiving command from simulator");
+                        error!("Client {}: Error receiving command from simulator", self.id);
                     }
                 }
             }
@@ -113,7 +113,7 @@ impl DronegowskiClient {
 
     /// Handles a command received from the simulation controller.
     fn handle_client_command(&mut self, command: ClientCommand) {
-        info!(target: &format!("client_{}", self.id), "Received command from simulator: {:?}", command);
+        info!("Client {}: Received command from simulator: {:?}", self.id, command);
         match command {
             ClientCommand::RemoveSender(node_id) => {
                 // Removes a neighbor and re-executes server discovery.
@@ -139,21 +139,21 @@ impl DronegowskiClient {
 
     /// Handles a received packet.
     fn handle_packet(&mut self, packet: Packet) {
-        info!(target: &format!("client_{}", self.id), "Received packet: {:?}", packet);
+        info!("Client {}: Received packet: {:?}", self.id, packet);
 
         match packet.pack_type {
             PacketType::MsgFragment(_) => self.handle_message_fragment(packet),
             PacketType::FloodResponse(flood_response) => {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Received FloodResponse: {:?}",
+                    "Client {}: Received FloodResponse: {:?}",
+                    self.id,
                     flood_response
                 );
                 self.update_graph(flood_response.path_trace);
             }
             PacketType::FloodRequest(_) => self.handle_flood_request(packet),
             PacketType::Ack(ack) => {
-                info!(target: &format!("client_{}", self.id), "Received Ack for fragment {}", ack.fragment_index);
+                info!("Client {}: Received Ack for fragment {}", self.id, ack.fragment_index);
                 let session_id = packet.session_id;
                 let fragment_index = ack.fragment_index;
 
@@ -170,13 +170,13 @@ impl DronegowskiClient {
                     if acked.len() as u64 == total_fragments {
                         self.pending_messages.remove(&session_id);
                         self.acked_fragments.remove(&session_id);
-                        info!(target: &format!("client_{}", self.id), "All fragments for session {} have been acknowledged", session_id);
+                        info!("Client {}: All fragments for session {} have been acknowledged", self.id, session_id);
                     }
                 }
             }
             PacketType::Nack(ref nack) => {
                 // Nack packets are not handled at the moment. It might be necessary to implement them for error handling.
-                info!(target: &format!("client_{}", self.id), "Received Nack (unhandled)");
+                info!("Client {}: Received Nack (unhandled)", self.id);
                 let drop_drone = packet.clone().routing_header.hops[0];
                 // NACK HANDLING METHOD
                 self.handle_nack(nack.clone(), packet.session_id, drop_drone);
@@ -194,8 +194,8 @@ impl DronegowskiClient {
 
         match nack.nack_type {
             NackType::Dropped => {
-                if *counter > 3 { // Reduced threshold from 5 to 3 for faster reaction
-                    info!(target: &format!("client_{}", self.id), "Too many NACKs for fragment {}. Calculating alternative path after {} attempts.", nack.fragment_index, counter);
+                if *counter > 5 {
+                    info!("Client {}: Too many NACKs for fragment {}. Calculating alternative path", self.id, nack.fragment_index);
 
                     // Add the problematic node to excluded nodes
                     self.excluded_nodes.insert(id_drop_drone);
@@ -210,8 +210,8 @@ impl DronegowskiClient {
                                     new_packet.routing_header.hop_index = 1;
 
                                     if let Some(next_hop) = new_packet.routing_header.hops.get(1) {
-                                        info!(target: &format!("client_{}", self.id), "Resending fragment {} via new path: {:?}",
-                                        nack.fragment_index, new_packet.routing_header.hops);
+                                        info!("Client {}: Resending fragment {} via new path: {:?}",
+                                        self.id, nack.fragment_index, new_packet.routing_header.hops);
                                         self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error
 
                                         // Reset the counter after rerouting
@@ -222,21 +222,21 @@ impl DronegowskiClient {
                             }
                         }
                     }
-                    warn!(target: &format!("client_{}", self.id), "Unable to find alternative path for fragment {}", nack.fragment_index);
+                    warn!("Client {}: Unable to find alternative path", self.id);
                 } else {
                     // Standard resend
                     if let Some(fragments) = self.pending_messages.get(&session_id) {
                         if let Some(packet) = fragments.get(nack.fragment_index as usize) {
-                            info!(target: &format!("client_{}", self.id), "Attempt {} for fragment {}",
-                            counter, nack.fragment_index);
+                            info!("Client {}: Attempt {} for fragment {}",
+                            self.id, counter, nack.fragment_index);
                             self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]);
                         }
                     }
                 }
             }
             _ => {
-                // Handling other NACK types, for now just resend using the same path.
-                warn!(target: &format!("client_{}", self.id), "Received NACK of type {:?}, resending fragment", nack.nack_type);
+                // Handling other NACK types
+                self.server_discovery();
                 if let Some(fragments) = self.pending_messages.get(&session_id) {
                     if let Some(packet) = fragments.get(nack.fragment_index as usize) {
                         self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]);
@@ -291,7 +291,7 @@ impl DronegowskiClient {
             PacketType::MsgFragment(f) => f,
             _ => {
                 // Should never happen, as this function is only called for MsgFragment.
-                error!(target: &format!("client_{}", self.id), "handle_message_fragment called with a non-MsgFragment packet type");
+                error!("Client {}: handle_message_fragment called with a non-MsgFragment packet type", self.id);
                 return;
             }
         };
@@ -299,14 +299,14 @@ impl DronegowskiClient {
         let src_id = match packet.routing_header.source() {
             Some(id) => id,
             None => {
-                warn!(target: &format!("client_{}", self.id), "MsgFragment without sender");
+                warn!("Client {}: MsgFragment without sender", self.id);
                 return;
             }
         };
 
         info!(
-            target: &format!("client_{}", self.id),
-            "Received MsgFragment from: {}, Session: {}, Index: {}, Total: {}",
+            "Client {}: Received MsgFragment from: {}, Session: {}, Index: {}, Total: {}",
+            self.id,
             src_id,
             packet.session_id,
             fragment.fragment_index,
@@ -326,8 +326,8 @@ impl DronegowskiClient {
                 .entry(key)
                 .or_insert_with(|| {
                     info!(
-                        target: &format!("client_{}", self.id),
-                        "Initializing storage for session {} from {}",
+                        "Client {}: Initializing storage for session {} from {}",
+                        self.id,
                         packet.session_id,
                         src_id
                     );
@@ -344,7 +344,7 @@ impl DronegowskiClient {
             if (fragment.fragment_index as usize) < fragments_received.len() {
                 fragments_received[fragment.fragment_index as usize] = true;
             } else {
-                error!(target: &format!("client_{}", self.id), "Fragment index {} out of bounds for session {} from {}", fragment.fragment_index, packet.session_id, src_id);
+                error!("Client {}: Fragment index {} out of bounds for session {} from {}", self.id, fragment.fragment_index, packet.session_id, src_id);
                 return;
             }
 
@@ -362,12 +362,12 @@ impl DronegowskiClient {
             );
 
             if let Some(next_hop) = ack_packet.routing_header.hops.get(1).cloned() {
-                info!(target: &format!("client_{}", self.id), "Sending Ack for fragment {} to {}", fragment.fragment_index, next_hop);
+                info!("Client {}: Sending Ack for fragment {} to {}", self.id, fragment.fragment_index, next_hop);
                 // Store ack_packet and next_hop for sending after mutable borrow ends
                 ack_packet_option = Some(ack_packet);
                 next_hop_option = Some(next_hop);
             } else {
-                warn!(target: &format!("client_{}", self.id), "No valid path to send Ack for fragment {}", fragment.fragment_index);
+                warn!("Client {}: No valid path to send Ack for fragment {}", self.id, fragment.fragment_index);
             }
 
             // Checks if all fragments have been received.
@@ -376,8 +376,8 @@ impl DronegowskiClient {
 
             let percentage = (fragments_received.iter().filter(|&&r| r).count() * 100) / fragment.total_n_fragments as usize;
             info!(
-                target: &format!("client_{}", self.id),
-                "Fragment {}/{} for session {} from {}. {}% complete.",
+                "Client {}: Fragment {}/{} for session {} from {}. {}% complete.",
+                self.id,
                 fragment.fragment_index + 1,
                 fragment.total_n_fragments,
                 packet.session_id,
@@ -406,7 +406,7 @@ impl DronegowskiClient {
             self.process_reassembled_message(session_id, src_id, &message_data);
             // Removes the entry from the `message_storage` map.
             self.message_storage.remove(&(session_id as usize, src_id));
-            info!(target: &format!("client_{}", self.id), "Message from session {} from {} removed from storage", session_id, src_id);
+            info!("Client {}: Message from session {} from {} removed from storage", self.id, session_id, src_id);
         }
     }
 
@@ -420,8 +420,8 @@ impl DronegowskiClient {
             }
             Ok(deserialized_message) => {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Message from session {} from {} completely reassembled: {:?}",
+                    "Client {}: Message from session {} from {} completely reassembled: {:?}",
+                    self.id,
                     session_id,
                     src_id,
                     deserialized_message
@@ -433,8 +433,8 @@ impl DronegowskiClient {
             }
             Err(e) => {
                 error!(
-                    target: &format!("client_{}", self.id),
-                    "Error deserializing session {} from {}: {:?}",
+                    "Client {}: Error deserializing session {} from {}: {:?}",
+                    self.id,
                     session_id,
                     src_id,
                     e
@@ -448,27 +448,27 @@ impl DronegowskiClient {
 
         match server_message {
             ServerMessages::ServerType(server_type) => {
-                info!(target: &format!("client_{}", self.id), "Received ServerType: {:?}", server_type);
+                info!("Client {}: Received ServerType: {:?}", self.id, server_type);
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::ServerTypeReceived(self.id, src_id, server_type));
             }
             ServerMessages::ClientList(clients) => {
-                info!(target: &format!("client_{}", self.id), "Received ClientList: {:?}", clients);
+                info!("Client {}: Received ClientList: {:?}", self.id, clients);
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::ClientListReceived(self.id, src_id, clients));
             }
             ServerMessages::FilesList(files) => {
-                info!(target: &format!("client_{}", self.id), "Received FilesList: {:?}", files);
+                info!("Client {}: Received FilesList: {:?}", self.id, files);
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::FilesListReceived(self.id, src_id, files));
             }
             ServerMessages::File(file_data) => {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Received file data (size: {} bytes)",
+                    "Client {}: Received file data (size: {} bytes)",
+                    self.id,
                     file_data.text.len()
                 );
                 let _ = self
@@ -477,8 +477,8 @@ impl DronegowskiClient {
             }
             ServerMessages::Media(media_data) => {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Received media data (size: {} bytes)",
+                    "Client {}: Received media data (size: {} bytes)",
+                    self.id,
                     media_data.len()
                 );
                 let _ = self
@@ -487,8 +487,8 @@ impl DronegowskiClient {
             }
             ServerMessages::MessageFrom(from_id, message) => {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Received MessageFrom: {} from {}",
+                    "Client {}: Received MessageFrom: {} from {}",
+                    self.id,
                     message,
                     from_id
                 );
@@ -497,15 +497,15 @@ impl DronegowskiClient {
                 ));
             }
             ServerMessages::RegistrationOk => {
-                info!(target: &format!("client_{}", self.id), "Received RegistrationOk");
+                info!("Client {}: Received RegistrationOk", self.id);
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::RegistrationOk(self.id, src_id));
             }
             ServerMessages::RegistrationError(error) => {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Received RegistrationError, cause: {}",
+                    "Client {}: Received RegistrationError, cause: {}",
+                    self.id,
                     error
                 );
                 let _ = self
@@ -514,8 +514,8 @@ impl DronegowskiClient {
             }
             ServerMessages::Error(error) => {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Received Error, cause: {}",
+                    "Client {}: Received Error, cause: {}",
+                    self.id,
                     error
                 );
                 let _ = self
@@ -527,22 +527,21 @@ impl DronegowskiClient {
 
     /// Switches the client type (ChatClients <-> WebBrowsers).
     pub fn switch_client_type(&mut self) {
-        info!(target: &format!("client_{}", self.id), "Switching client type");
+        info!("Client {}: Switching client type", self.id);
         self.client_type = match self.client_type {
             ClientType::ChatClients => ClientType::WebBrowsers,
             ClientType::WebBrowsers => ClientType::ChatClients,
         };
-        info!(target: &format!("client_{}", self.id), "New client type: {:?}", self.client_type);
+        info!("Client {}: New client type: {:?}", self.id, self.client_type);
     }
 
     /// Sends a Flood request to discover servers.
     pub fn server_discovery(&mut self) {
-        info!(target: &format!("client_{}", self.id), "Starting server discovery");
+        info!("Client {}: Starting server discovery", self.id);
 
         // CLEAR CLIENT TOPOLOGY
         self.topology.clear();
         self.node_types.clear();
-        self.excluded_nodes.clear(); // Clear excluded nodes at each discovery
 
         let flood_request = FloodRequest {
             flood_id: generate_unique_id(),
@@ -552,7 +551,7 @@ impl DronegowskiClient {
 
         // Sends a Flood request to all neighbors.
         for (&node_id, _) in &self.packet_send {
-            info!(target: &format!("client_{}", self.id), "Sending FloodRequest to node {}", node_id);
+            info!("Client {}: Sending FloodRequest to node {}", self.id, node_id);
             let packet = Packet {
                 pack_type: PacketType::FloodRequest(flood_request.clone()),
                 routing_header: SourceRoutingHeader {
@@ -567,7 +566,7 @@ impl DronegowskiClient {
 
     /// Updates the network topology and node types based on the received path_trace.
     fn update_graph(&mut self, path_trace: Vec<(NodeId, NodeType)>) {
-        info!(target: &format!("client_{}", self.id), "Updating graph with: {:?}", path_trace);
+        info!("Client {}: Updating graph with: {:?}", self.id, path_trace);
         // Adds edges to the graph (bidirectional).
         for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
@@ -575,19 +574,19 @@ impl DronegowskiClient {
             self.topology.insert((node_a, node_b));
             self.topology.insert((node_b, node_a));
         }
-        debug!(target: &format!("client_{}", self.id), "Updated topology: {:?}", self.topology);
+        debug!("Client {}: Updated topology: {:?}", self.id, self.topology);
 
         // Updates node types.
         for (node_id, node_type) in path_trace {
             self.node_types.insert(node_id, node_type);
         }
-        debug!(target: &format!("client_{}", self.id), "Updated node types: {:?}", self.node_types);
+        debug!("Client {}: Updated node types: {:?}", self.id, self.node_types);
     }
 
     /// Calculates a route from the client to the target server using BFS.
     fn compute_route(&self, target_server: &NodeId) -> Option<Vec<NodeId>> {
-        info!(target: &format!("client_{}", self.id), "Calculating route to {}", target_server);
-        info!(target: &format!("client_{}", self.id), "Current topology: {:?}", self.topology);
+        info!("Client {}: Calculating route to {}", self.id, target_server);
+        info!("Client {}: Current topology: {:?}", self.id, self.topology);
 
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
@@ -598,11 +597,11 @@ impl DronegowskiClient {
         visited.insert(self.id);
 
         while let Some(current_node) = queue.pop_front() {
-            debug!(target: &format!("client_{}", self.id), "Current node in BFS: {}", current_node);
+            debug!("Client {}: Current node in BFS: {}", self.id, current_node);
 
             // If the current node is the destination server, reconstructs the path and returns it.
             if current_node == *target_server {
-                debug!(target: &format!("client_{}", self.id), "Destination server {} found!", target_server);
+                debug!("Client {}: Destination server {} found!", self.id, target_server);
                 let mut path = Vec::new();
                 let mut current = *target_server;
                 // Reconstructs the path backward from predecessors.
@@ -612,7 +611,7 @@ impl DronegowskiClient {
                 }
                 path.push(self.id); // Adds the starting node (the client itself).
                 path.reverse(); // Reverses the path to get the correct order.
-                info!(target: &format!("client_{}", self.id), "Path found: {:?}", path);
+                info!("Client {}: Path found: {:?}", self.id, path);
                 return Some(path);
             }
 
@@ -620,12 +619,12 @@ impl DronegowskiClient {
             for &(node_a, node_b) in &self.topology {
                 // Checks neighbors in both directions.
                 if node_a == current_node && !visited.contains(&node_b) {
-                    debug!(target: &format!("client_{}", self.id), "Exploring neighbor: {} of {}", node_b, node_a);
+                    debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_b, node_a);
                     visited.insert(node_b);
                     queue.push_back(node_b);
                     predecessors.insert(node_b, node_a); // Stores the predecessor.
                 } else if node_b == current_node && !visited.contains(&node_a) {
-                    debug!(target: &format!("client_{}", self.id), "Exploring neighbor: {} of {}", node_a, node_b);
+                    debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_a, node_b);
                     visited.insert(node_a);
                     queue.push_back(node_a);
                     predecessors.insert(node_a, node_b); // Stores the predecessor.
@@ -634,7 +633,7 @@ impl DronegowskiClient {
         }
 
         // If no path is found, returns None.
-        warn!(target: &format!("client_{}", self.id), "No path found to {}", target_server);
+        warn!("Client {}: No path found to {}", self.id, target_server);
         None
     }
 
@@ -651,19 +650,19 @@ impl DronegowskiClient {
 
     /// Sends a chat registration request to a server.
     pub fn register_with_server(&mut self, server_id: &NodeId) {
-        info!(target: &format!("client_{}", self.id), "Sending chat registration request to server {}", server_id);
+        info!("Client {}: Sending chat registration request to server {}", self.id, server_id);
         self.send_client_message_to_server(server_id, ClientMessages::RegistrationToChat);
     }
 
     /// Requests the list of connected clients from a server.
     pub fn request_client_list(&mut self, server_id: &NodeId) {
-        info!(target: &format!("client_{}", self.id), "Requesting client list from server {}", server_id);
+        info!("Client {}: Requesting client list from server {}", self.id, server_id);
         self.send_client_message_to_server(server_id, ClientMessages::ClientList);
     }
 
     /// Sends a message to another client via a server.
     pub fn send_message(&mut self, server_id: &NodeId, target_id: NodeId, message_to_client: String) {
-        info!(target: &format!("client_{}", self.id), "Sending message \"{}\" to client {} via server {}", message_to_client, target_id, server_id);
+        info!("Client {}: Sending message \"{}\" to client {} via server {}", self.id, message_to_client, target_id, server_id);
         self.send_client_message_to_server(
             server_id,
             ClientMessages::MessageFor(target_id, message_to_client),
@@ -672,25 +671,25 @@ impl DronegowskiClient {
 
     /// Requests the list of available files from a server.
     pub fn request_file_list(&mut self, server_id: &NodeId) {
-        info!(target: &format!("client_{}", self.id), "Requesting file list from server {}", server_id);
+        info!("Client {}: Requesting file list from server {}", self.id, server_id);
         self.send_client_message_to_server(server_id, ClientMessages::FilesList);
     }
 
     /// Requests a specific file from a server.
     pub fn request_file(&mut self, server_id: &NodeId, file_id: u64) {
-        info!(target: &format!("client_{}", self.id), "Requesting file {} from server {}", file_id, server_id);
+        info!("Client {}: Requesting file {} from server {}", self.id, file_id, server_id);
         self.send_client_message_to_server(server_id, ClientMessages::File(file_id));
     }
 
     /// Requests a specific media from a server.
     pub fn request_media(&mut self, server_id: &NodeId, file_id: u64) {
-        info!(target: &format!("client_{}", self.id), "Requesting media {} from server {}", file_id, server_id);
+        info!("Client {}: Requesting media {} from server {}", self.id, file_id, server_id);
         self.send_client_message_to_server(server_id, ClientMessages::Media(file_id));
     }
 
     /// Requests the type of server.
     pub fn request_server_type(&mut self, server_id: &NodeId) {
-        info!(target: &format!("client_{}", self.id), "Requesting server type from server {}", server_id);
+        info!("Client {}: Requesting server type from server {}", self.id, server_id);
         self.send_client_message_to_server(server_id, ClientMessages::ServerType);
     }
 
@@ -698,8 +697,8 @@ impl DronegowskiClient {
     /// Sends a message (`TestMessage`) to a specific node.
     /// The message is fragmented and sent as a series of `MsgFragment` packets.
     fn send_message_to_node(&mut self, target_id: &NodeId, message: TestMessage) {
-        // Clear excluded nodes at the start of sending a new message is now done at server_discovery and send_client_message_to_server
-        // self.excluded_nodes.clear();
+        // Clear excluded nodes at the start of sending a new message
+        self.excluded_nodes.clear();
 
         // Calculate the path to the destination node.
         if let Some(path) = self.compute_route(target_id) {
@@ -707,23 +706,22 @@ impl DronegowskiClient {
             let session_id = generate_unique_id();
             let fragments = fragment_message(&message, path.clone(), session_id);
             self.pending_messages.insert(session_id, fragments.clone());
-            self.acked_fragments.insert(session_id, HashSet::new()); // Initialize acked fragments
 
             // Sends fragments to the first hop of the path.
             if let (Some(next_hop), true) = (path.get(1), path.len() > 1) {
                 if let Some(_) = self.packet_send.get(next_hop) {
                     for packet in fragments {
-                        info!(target: &format!("client_{}", self.id), "Sending packet to next hop {}", *next_hop);
+                        info!("Client {}: Sending packet to next hop {}", self.id, *next_hop);
                         self.send_packet_and_notify(packet, *next_hop);
                     }
                 } else {
-                    error!(target: &format!("client_{}", self.id), "No sender for next hop {}", next_hop);
+                    error!("Client {}: No sender for next hop {}", self.id, next_hop);
                 }
             } else {
-                error!(target: &format!("client_{}", self.id), "Invalid path to {}", target_id);
+                error!("Client {}: Invalid path to {}", self.id, target_id);
             }
         } else {
-            warn!(target: &format!("client_{}", self.id), "No path to {}", target_id);
+            warn!("Client {}: No path to {}", self.id, target_id);
         }
     }
 
@@ -732,15 +730,15 @@ impl DronegowskiClient {
         if let Some(sender) = self.packet_send.get(&recipient_id) {
             if let Err(e) = sender.send(packet.clone()) {
                 error!(
-                    target: &format!("client_{}", self.id),
-                    "Error sending packet to {}: {:?}",
+                    "Client {}: Error sending packet to {}: {:?}",
+                    self.id,
                     recipient_id,
                     e
                 );
             } else {
                 info!(
-                    target: &format!("client_{}", self.id),
-                    "Packet sent to {}: must arrive at {}",
+                    "Client {}: Packet sent to {}: must arrive at {}",
+                    self.id,
                     recipient_id,
                     packet.routing_header.hops.last().unwrap(),
                 );
@@ -751,23 +749,23 @@ impl DronegowskiClient {
                     .send(ClientEvent::PacketSent(packet));
             }
         } else {
-            error!(target: &format!("client_{}", self.id), "No sender for node {}", recipient_id);
+            error!("Client {}: No sender for node {}", self.id, recipient_id);
         }
     }
 
     /// Adds a neighbor to the sender map.
     fn add_neighbor(&mut self, node_id: NodeId, sender: Sender<Packet>) {
-        info!(target: &format!("client_{}", self.id), "Adding neighbor {}", node_id);
+        info!("Client {}: Adding neighbor {}", self.id, node_id);
         if self.packet_send.insert(node_id, sender).is_some() {
-            warn!(target: &format!("client_{}", self.id), "Replaced existing sender for node {}", node_id);
+            warn!("Client {}: Replaced existing sender for node {}", self.id, node_id);
         }
     }
 
     /// Removes a neighbor from the sender map.
     fn remove_neighbor(&mut self, node_id: &NodeId) {
-        info!(target: &format!("client_{}", self.id), "Removing neighbor {}", node_id);
+        info!("Client {}: Removing neighbor {}", self.id, node_id);
         if self.packet_send.remove(node_id).is_none() {
-            warn!(target: &format!("client_{}", self.id), "Node {} was not a neighbor.", node_id);
+            warn!("Client {}: Node {} was not a neighbor.", self.id, node_id);
         }
     }
 
@@ -778,18 +776,18 @@ impl DronegowskiClient {
             PacketType::FloodRequest(req) => req,
             _ => {
                 // Should never happen.
-                error!(target: &format!("client_{}", self.id), "handle_flood_request called with a non-FloodRequest packet type");
+                error!("Client {}: handle_flood_request called with a non-FloodRequest packet type", self.id);
                 return;
             }
         };
 
-        info!(target: &format!("client_{}", self.id), "Received FloodRequest: {:?}", flood_request);
+        info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request);
 
         // Gets the sender ID.
         let source_id = match packet.routing_header.source() {
             Some(id) => id,
             None => {
-                warn!(target: &format!("client_{}", self.id), "FloodRequest without sender");
+                warn!("Client {}: FloodRequest without sender", self.id);
                 return;
             }
         };
@@ -818,11 +816,11 @@ impl DronegowskiClient {
             session_id: packet.session_id,
         };
 
-        info!(target: &format!("client_{}", self.id), "Sending FloodResponse to {}, response packet: {:?}", source_id, response_packet);
+        info!("Client {}: Sending FloodResponse to {}, response packet: {:?}", self.id, source_id, response_packet);
 
         // Sends the FloodResponse to the sender.
         let next_node = response_packet.routing_header.hops[0];
-        info!(target: &format!("client_{}", self.id), "Sending FloodResponse via {}", next_node);
+        info!("Client {}: Sending FloodResponse via {}", self.id, next_node);
         self.send_packet_and_notify(response_packet, next_node);
     }
 
