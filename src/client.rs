@@ -131,13 +131,9 @@ impl DronegowskiClient {
             ClientCommand::Media(node_id, media_id) => self.request_media(&node_id, media_id),
             ClientCommand::ClientList(node_id) => self.request_client_list(&node_id),
             ClientCommand::RegistrationToChat(node_id) => self.register_with_server(&node_id),
-            ClientCommand::MessageFor(node_id, client_id, message) => {
-                self.send_message(&node_id, client_id, message)
-            }
+            ClientCommand::MessageFor(node_id, client_id, message) => self.send_message(&node_id, client_id, message),
             ClientCommand::RequestNetworkDiscovery => self.server_discovery(),
-            ClientCommand::ControllerShortcut(packet) => {
-                self.handle_packet(packet);
-            }
+            ClientCommand::ControllerShortcut(packet) => self.handle_packet(packet),
         }
     }
 
@@ -477,7 +473,7 @@ impl DronegowskiClient {
                 );
                 let _ = self
                     .sim_controller_send
-                    .send(ClientEvent::FileReceived(self.id, src_id, file_data.text));
+                    .send(ClientEvent::FileReceived(self.id, src_id, file_data));
             }
             ServerMessages::Media(media_data) => {
                 info!(
