@@ -781,7 +781,7 @@ impl DronegowskiClient {
             }
         };
 
-        // info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
+         info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
 
         // Gets the sender ID.
         let source_id = match packet.routing_header.source() {
@@ -816,7 +816,7 @@ impl DronegowskiClient {
             session_id: packet.session_id,
         };
 
-        // info!("Client {}: Sending FloodResponse to {}, response packet: {:?}", self.id, source_id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
+         info!("Client {}: Sending FloodResponse to {}, response packet: {:?}", self.id, source_id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
 
         // Sends the FloodResponse to the sender.
         let next_node = response_packet.routing_header.hops[0];
