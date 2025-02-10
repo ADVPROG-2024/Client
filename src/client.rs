@@ -13,7 +13,7 @@ use wg_2024::packet::{FloodRequest, FloodResponse, Nack, NackType, NodeType, Pac
 
 /// `DronegowskiClient` represents a client within the simulation.
 /// It manages communication with the simulator, sending and receiving packets,
-/// and the client-specific logic (chat or web browsing).
+/// and the client-specific logic (chat or web browsing)
 #[derive(Debug)]
 pub struct DronegowskiClient {
     /// Unique identifier of the client.
