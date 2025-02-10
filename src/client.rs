@@ -526,9 +526,6 @@ impl DronegowskiClient {
                     .sim_controller_send
                     .send(ClientEvent::Error(self.id, error));
             }
-            other => {
-                println!("Client {}: Received unhandled server message: {:?}", self.id, other);
-            }
         }
     }
 
@@ -831,9 +828,9 @@ impl DronegowskiClient {
         self.send_packet_and_notify(response_packet, next_node);
     }
 
-    fn handle_error(&mut self, error_msg: String) {
-        let _ = self.sim_controller_send.send(
-            ClientEvent::Error(self.id, error_msg)
-        );
-    }
+    // fn handle_error(&mut self, error_msg: String) {
+    //     let _ = self.sim_controller_send.send(
+    //         ClientEvent::Error(self.id, error_msg)
+    //     );
+    // }
 }
