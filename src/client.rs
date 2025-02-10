@@ -135,6 +135,7 @@ impl DronegowskiClient {
                 self.send_message(&node_id, client_id, message)
             }
             ClientCommand::RequestNetworkDiscovery => self.server_discovery(),
+            _ => {}
         }
     }
 
