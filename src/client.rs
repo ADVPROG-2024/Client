@@ -307,7 +307,7 @@ impl DronegowskiClient {
                 }
             }
         }
-        self.sim_controller_send(ClientEvent::Error(*target_server, "not alternative path".to_string()));
+        self.sim_controller_send.send(ClientEvent::Error(*target_server, "not alternative path".to_string())).expect("Problem to send the event");
         None // Return None if no path is found.
     }
 
