@@ -924,7 +924,7 @@ impl DronegowskiClient {
         let response_packet = Packet {
             pack_type: PacketType::FloodResponse(flood_response.clone()), // Sets packet type to FloodResponse.
             routing_header: SourceRoutingHeader {
-                hop_index: 0,
+                hop_index: 1,
                 // Reverses the path_trace to return to the sender.
                 hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(), // Reverses the received path trace to create the return path.
             },
