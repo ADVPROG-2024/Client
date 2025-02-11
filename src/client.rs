@@ -211,7 +211,7 @@ impl DronegowskiClient {
 
         match nack.nack_type {
             NackType::Dropped => {
-                if *counter > 5 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
+                if *counter > 10 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
                     // info!("Client {}: Too many NACKs for fragment {}. Calculating alternative path", self.id, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
 
                     // Add the problematic node to excluded nodes
