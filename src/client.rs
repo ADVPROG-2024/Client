@@ -308,8 +308,7 @@ impl DronegowskiClient {
             }
         }
 
-        info!("Sono qui");
-        let _ = self.sim_controller_send.send(ClientEvent::Error(*target_server, "not alternative path".to_string()));
+        let _ = self.sim_controller_send.send(ClientEvent::Error(self.id, "not alternative path".to_string()));
         None // Return None if no path is found.
     }
 
