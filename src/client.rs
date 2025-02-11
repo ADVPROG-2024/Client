@@ -782,7 +782,7 @@ impl DronegowskiClient {
     ///
     /// * `server_id`: The ID of the server to request the type from.
     pub fn request_server_type(&mut self, server_id: &NodeId) {
-        // info!("Client {}: Requesting server type from server {}", self.id, server_id); // Logged when the client is requesting the type of a server (e.g., web or chat server).
+        info!("Client {}: Requesting server type from server {}", self.id, server_id); // Logged when the client is requesting the type of a server (e.g., web or chat server).
         self.send_client_message_to_server(server_id, ClientMessages::ServerType); // Sends a server type request to the specified server.
     }
 
@@ -809,7 +809,7 @@ impl DronegowskiClient {
             if let (Some(next_hop), true) = (path.get(1), path.len() > 1) { // Checks if there is a valid next hop in the calculated path.
                 if let Some(_) = self.packet_send.get(next_hop) { // Checks if there is a sender channel for the next hop.
                     for packet in fragments { // Iterates through each fragment.
-                        // info!("Client {}: Sending packet to next hop {}", self.id, *next_hop); // Logged before sending each fragment of a message to the next hop in the calculated path.
+                        info!("Client {}: Sending packet to next hop {}", self.id, *next_hop); // Logged before sending each fragment of a message to the next hop in the calculated path.
                         self.send_packet_and_notify(packet, *next_hop); // Sends each fragment to the next hop.
                     }
                 } else {
@@ -925,14 +925,14 @@ impl DronegowskiClient {
         let response_packet = Packet {
             pack_type: PacketType::FloodResponse(flood_response.clone()), // Sets packet type to FloodResponse.
             routing_header: SourceRoutingHeader {
-                hop_index: 0,
+                hop_index: 1,
                 // Reverses the path_trace to return to the sender.
                 hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(), // Reverses the received path trace to create the return path.
             },
             session_id: packet.session_id, // Carries over the session ID from the request.
         };
 
-        //info!("Client {}: Sending FloodResponse to {}, response packet: {:?}", self.id, source_id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
+        info!("Client {}: Sending FloodResponse, response packet: {:?}", self.id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
 
         // Sends the FloodResponse to the sender.
         let next_node = response_packet.routing_header.hops[0]; // Gets the next hop from the response packet's routing header.
