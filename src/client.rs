@@ -307,6 +307,7 @@ impl DronegowskiClient {
                 }
             }
         }
+        self.sim_controller_send(ClientEvent::Error(target_server, "not alternative path"));
         None // Return None if no path is found.
     }
 
