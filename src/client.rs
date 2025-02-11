@@ -918,7 +918,7 @@ impl DronegowskiClient {
         // Creates the FloodResponse.
         let flood_response = FloodResponse {
             flood_id: flood_request.flood_id, // Carries over the flood ID from the request.
-            path_trace: response_path_trace, // Sets the path trace for the response.
+            path_trace: response_path_trace.clone(), // Sets the path trace for the response.
         };
 
         // Creates the response packet.
@@ -927,7 +927,7 @@ impl DronegowskiClient {
             routing_header: SourceRoutingHeader {
                 hop_index: 1,
                 // Reverses the path_trace to return to the sender.
-                hops: flood_request.path_trace.iter().rev().map(|(id, _)| *id).collect(), // Reverses the received path trace to create the return path.
+                hops: response_path_trace.iter().rev().map(|(id, _)| *id).collect(), // Reverses the received path trace to create the return path.
             },
             session_id: packet.session_id, // Carries over the session ID from the request.
         };
@@ -935,7 +935,7 @@ impl DronegowskiClient {
         info!("Client {}: Sending FloodResponse, response packet: {:?}", self.id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
 
         // Sends the FloodResponse to the sender.
-        let next_node = response_packet.routing_header.hops[0]; // Gets the next hop from the response packet's routing header.
+        let next_node = response_packet.routing_header.hops[1]; // Gets the next hop from the response packet's routing header.
         self.send_packet_and_notify(response_packet, next_node); // Sends the FloodResponse packet to the next hop.
     }
 }
