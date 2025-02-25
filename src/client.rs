@@ -222,6 +222,11 @@ impl DronegowskiClient {
                         if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the specific fragment that was NACKed.
                             if let Some(target_server) = packet.routing_header.hops.last() { // Gets the final destination server from the packet's routing header.
                                 if let Some(new_path) = self.compute_route_excluding(target_server) { // Computes a new route to the target server, excluding problematic nodes.
+                                    // sending route to SC
+                                    let _ = self
+                                        .sim_controller_send
+                                        .send(ClientEvent::Route(new_path.clone()));
+
                                     let mut new_packet = packet.clone();
                                     new_packet.routing_header.hops = new_path; // Updates the packet's routing header with the new path.
                                     new_packet.routing_header.hop_index = 1; // Resets hop index for the new path.
@@ -801,6 +806,11 @@ impl DronegowskiClient {
 
         // Calculate the path to the destination node.
         if let Some(path) = self.compute_route(target_id) { // Computes a route to the target node.
+
+            // sending route to SC
+            let _ = self
+                .sim_controller_send
+                .send(ClientEvent::Route(path.clone()));
 
             let session_id = generate_unique_id(); // Generates a unique session ID for the message transmission.
             let fragments = fragment_message(&message, path.clone(), session_id); // Fragments the message into packets.
