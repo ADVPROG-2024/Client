@@ -212,10 +212,15 @@ impl DronegowskiClient {
         match nack.nack_type {
             NackType::Dropped => {
                 if *counter > 10 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
-                    // info!("Client {}: Too many NACKs for fragment {}. Calculating alternative path", self.id, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
+
+                    info!("Client {}: 10 NACKs for fragment {} from drone {}. Calculating alternative path", self.id, nack.fragment_index, id_drop_drone); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
+                    // add Client event
+                    let _ = self.sim_controller_send.send(ClientEvent::Error(self.id, format!("10 NACKs for fragment {} from drone {}. Calculating alternative path", nack.fragment_index, id_drop_drone)));
 
                     // Add the problematic node to excluded nodes
                     self.excluded_nodes.insert(id_drop_drone); // Adds the node that dropped the packet to the set of excluded nodes.
+                    let _ = self.sim_controller_send.send(ClientEvent::Error(self.id, format!("excluded nodes: {:?}", self.excluded_nodes)));
+
 
                     // Reconstruct the packet with a new path
                     if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves the pending message fragments for the session.
@@ -232,8 +237,10 @@ impl DronegowskiClient {
                                     new_packet.routing_header.hop_index = 1; // Resets hop index for the new path.
 
                                     if let Some(next_hop) = new_packet.routing_header.hops.get(1) { // Gets the next hop in the new path.
-                                        // info!("Client {}: Resending fragment {} via new path: {:?}",
-                                        // self.id, nack.fragment_index, new_packet.routing_header.hops); // Logged when a fragment is being resent using an alternative path due to excessive NACKs. Shows the new path being used.
+                                        info!("Client {}: Resending fragment {} via new path: {:?}",
+                                            self.id, nack.fragment_index, new_packet.routing_header.hops); // Logged when a fragment is being resent using an alternative path due to excessive NACKs. Shows the new path being used.
+                                        // add Client event
+
                                         self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error, resends the fragment using the new path.
 
                                         // Reset the counter after rerouting
