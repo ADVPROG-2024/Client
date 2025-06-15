@@ -208,6 +208,10 @@ impl DronegowskiClient {
         let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
         *counter += 1; // Increments the NACK counter.
 
+        let _ = self
+            .sim_controller_send
+            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack {} from {}", self.id, counter, id_drop_drone)));
+
         match nack.nack_type {
             NackType::Dropped => {
                 if *counter > 10 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
