@@ -221,15 +221,17 @@ impl DronegowskiClient {
                     // Add the problematic node to excluded nodes
                     self.excluded_nodes.insert(id_drop_drone); // Adds the node that dropped the packet to the set of excluded nodes.
 
+                    let _ = self
+                        .sim_controller_send
+                        .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route exclude {:?}", self.id, self.excluded_nodes)));
+
                     // Reconstruct the packet with a new path
                     if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves the pending message fragments for the session.
                         if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the specific fragment that was NACKed.
                             if let Some(target_server) = packet.routing_header.hops.last() { // Gets the final destination server from the packet's routing header.
                                 if let Some(new_path) = self.compute_route_excluding(target_server) { // Computes a new route to the target server, excluding problematic nodes.
                                     // sending route to SC
-                                    let _ = self
-                                        .sim_controller_send
-                                        .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route exclude {:?}", self.id, self.excluded_nodes)));
+
 
                                     let _ = self
                                         .sim_controller_send
