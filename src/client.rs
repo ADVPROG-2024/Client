@@ -215,7 +215,7 @@ impl DronegowskiClient {
 
                     info!("Client {}: 10 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
                     // add Client event
-                    let _ = self.sim_controller_send.send(ClientEvent::Error(self.id, format!("10 NACKs for fragment {} from drone {}. Calculating alternative path", nack.fragment_index, id_drop_drone)));
+                    let _ = self.sim_controller_send.send(ClientEvent::Error(self.id, format!("10 NACKs from drone {} for fragment {}. Calculating alternative path", id_drop_drone, nack.fragment_index)));
 
                     // Add the problematic node to excluded nodes
                     self.excluded_nodes.insert(id_drop_drone); // Adds the node that dropped the packet to the set of excluded nodes.
