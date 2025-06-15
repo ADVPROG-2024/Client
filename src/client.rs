@@ -228,6 +228,8 @@ impl DronegowskiClient {
                         .sim_controller_send
                         .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route exclude {:?}", self.id, self.excluded_nodes)));
 
+                    self.server_discovery();
+
                     // Reconstruct the packet with a new path
                     if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves the pending message fragments for the session.
                         if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the specific fragment that was NACKed.
