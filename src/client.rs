@@ -208,15 +208,17 @@ impl DronegowskiClient {
         let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
         *counter += 1; // Increments the NACK counter.
 
+
+
         match nack.nack_type {
             NackType::Dropped => {
                 let _ = self
                     .sim_controller_send
-                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {}", self.id, counter, id_drop_drone)));
+                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {} / {}", self.id, counter, id_drop_drone, nack.fragment_index)));
 
                 if *counter > 3 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
 
-                    info!("Client {}: 10 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
+                    info!("Client {}: 4 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
 
 
                     // Add the problematic node to excluded nodes
