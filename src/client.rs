@@ -477,7 +477,7 @@ impl DronegowskiClient {
                 //     src_id,
                 //     deserialized_message
                 // ); // Logged when a complete message has been reassembled and successfully deserialized. Shows the session ID, sender, and the deserialized message content.
-                // Sends the received message to the simulation controller.
+                // Sends the received message to the simulation controller
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::ErrorMessage(self.id, format!("Client {}: received from {}", self.id, src_id)));
