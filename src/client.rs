@@ -214,16 +214,12 @@ impl DronegowskiClient {
 
         match nack.nack_type {
             NackType::Dropped => {
-                if *counter > 10 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
+                if *counter > 3 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
 
                     info!("Client {}: 10 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
-                    // add Client event
-                    //let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("10 NACKs from drone {} for fragment {}. Calculating alternative path", id_drop_drone, nack.fragment_index)));
 
                     // Add the problematic node to excluded nodes
                     self.excluded_nodes.insert(id_drop_drone); // Adds the node that dropped the packet to the set of excluded nodes.
-                    // let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("excluded nodes: {:?}", self.excluded_nodes)));
-
 
                     // Reconstruct the packet with a new path
                     if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves the pending message fragments for the session.
@@ -231,6 +227,10 @@ impl DronegowskiClient {
                             if let Some(target_server) = packet.routing_header.hops.last() { // Gets the final destination server from the packet's routing header.
                                 if let Some(new_path) = self.compute_route_excluding(target_server) { // Computes a new route to the target server, excluding problematic nodes.
                                     // sending route to SC
+                                    let _ = self
+                                        .sim_controller_send
+                                        .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route exclude {:?}", self.id, self.excluded_nodes)));
+
                                     let _ = self
                                         .sim_controller_send
                                         .send(ClientEvent::Route(new_path.clone()));
