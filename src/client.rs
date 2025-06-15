@@ -347,6 +347,10 @@ impl DronegowskiClient {
             }
         };
 
+        let _ = self
+            .sim_controller_send
+            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: received from {}", self.id, src_id)));
+
         // info!(
         //     "Client {}: Received MsgFragment from: {}, Session: {}, Index: {}, Total: {}",
         //     self.id,
@@ -478,9 +482,6 @@ impl DronegowskiClient {
                 //     deserialized_message
                 // ); // Logged when a complete message has been reassembled and successfully deserialized. Shows the session ID, sender, and the deserialized message content.
                 // Sends the received message to the simulation controller
-                let _ = self
-                    .sim_controller_send
-                    .send(ClientEvent::ErrorMessage(self.id, format!("Client {}: received from {}", self.id, src_id)));
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::MessageReceived(deserialized_message)); // Sends the deserialized message to the simulation controller.
