@@ -202,9 +202,6 @@ impl DronegowskiClient {
     /// * `session_id`: The session ID of the message.
     /// * `id_drop_drone`: The ID of the node that dropped the packet (indicated by the NACK).
     fn handle_nack(&mut self, nack: Nack, session_id: u64, id_drop_drone: NodeId) {
-        if (id_drop_drone == 1){
-            let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("NACK from drone {}", id_drop_drone)));
-        }
         let key = (nack.fragment_index, session_id, id_drop_drone); // Key for NACK counter: (fragment index, session ID, dropping node).
 
         // Uses Entry to correctly handle counter initialization
@@ -217,11 +214,11 @@ impl DronegowskiClient {
 
                     info!("Client {}: 10 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
                     // add Client event
-                    let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("10 NACKs from drone {} for fragment {}. Calculating alternative path", id_drop_drone, nack.fragment_index)));
+                    //let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("10 NACKs from drone {} for fragment {}. Calculating alternative path", id_drop_drone, nack.fragment_index)));
 
                     // Add the problematic node to excluded nodes
                     self.excluded_nodes.insert(id_drop_drone); // Adds the node that dropped the packet to the set of excluded nodes.
-                    let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("excluded nodes: {:?}", self.excluded_nodes)));
+                    // let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("excluded nodes: {:?}", self.excluded_nodes)));
 
 
                     // Reconstruct the packet with a new path
@@ -481,6 +478,9 @@ impl DronegowskiClient {
                 //     deserialized_message
                 // ); // Logged when a complete message has been reassembled and successfully deserialized. Shows the session ID, sender, and the deserialized message content.
                 // Sends the received message to the simulation controller.
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::ErrorMessage(self.id, format!("Client {}: received from {}", self.id, src_id)));
                 let _ = self
                     .sim_controller_send
                     .send(ClientEvent::MessageReceived(deserialized_message)); // Sends the deserialized message to the simulation controller.
