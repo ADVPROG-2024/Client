@@ -213,7 +213,7 @@ impl DronegowskiClient {
             NackType::Dropped => {
                 if *counter > 10 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
 
-                    info!("Client {}: 10 NACKs for fragment {} from drone {}. Calculating alternative path", self.id, nack.fragment_index, id_drop_drone); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
+                    info!("Client {}: 10 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
                     // add Client event
                     let _ = self.sim_controller_send.send(ClientEvent::Error(self.id, format!("10 NACKs for fragment {} from drone {}. Calculating alternative path", nack.fragment_index, id_drop_drone)));
 
