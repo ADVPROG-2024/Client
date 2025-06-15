@@ -16,12 +16,12 @@ fn test_network_discovery_protocol() {
     simple_log();
 
     // Creazione dei canali
-    let (sim_controller_send, sim_controller_recv) = unbounded::<ClientEvent>();
-    let (send_controller, controller_recv) = unbounded::<ClientCommand>();
+    let (sim_controller_send, _sim_controller_recv) = unbounded::<ClientEvent>();
+    let (_send_controller, controller_recv) = unbounded::<ClientCommand>();
     let (packet_send, packet_recv) = unbounded::<Packet>();
 
     // Mappa dei vicini (drone collegati)
-    let (neighbor_send, neighbor_recv) = unbounded();
+    let (neighbor_send, _neighbor_recv) = unbounded();
     let mut senders = HashMap::new();
     senders.insert(2, neighbor_send); // Drone 2 come vicino
 

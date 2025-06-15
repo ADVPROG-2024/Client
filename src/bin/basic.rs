@@ -12,12 +12,12 @@ fn main() {
     simple_log();
 
     // Creazione dei canali
-    let (sim_controller_send, _) = unbounded::<ClientEvent>();
-    let (_, controller_recv) = unbounded::<ClientCommand>();
-    let (_, packet_recv) = unbounded::<Packet>();
+    let (sim_controller_send, _sim_controller_recv) = unbounded::<ClientEvent>();
+    let (_controller_send, controller_recv) = unbounded::<ClientCommand>();
+    let (_packet_send, packet_recv) = unbounded::<Packet>();
 
     // Mappa dei vicini (drone collegati)
-    let (neighbor_send, _) = unbounded();
+    let (neighbor_send, _neighbour_recv) = unbounded();
     let mut senders = HashMap::new();
     senders.insert(2, neighbor_send); // Drone 2 come vicino
 
