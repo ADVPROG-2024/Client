@@ -208,15 +208,16 @@ impl DronegowskiClient {
         let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
         *counter += 1; // Increments the NACK counter.
 
-        let _ = self
-            .sim_controller_send
-            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack {} from {}", self.id, counter, id_drop_drone)));
-
         match nack.nack_type {
             NackType::Dropped => {
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {}", self.id, counter, id_drop_drone)));
+
                 if *counter > 3 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
 
                     info!("Client {}: 10 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
+
 
                     // Add the problematic node to excluded nodes
                     self.excluded_nodes.insert(id_drop_drone); // Adds the node that dropped the packet to the set of excluded nodes.
@@ -866,13 +867,6 @@ impl DronegowskiClient {
                     e
                 ); // Logged as an error if there's an issue sending a packet through the channel to the recipient. Indicates a problem with the channel or the recipient's receiver.
             } else {
-                // info!(
-                //     "Client {}: Packet sent to {}: must arrive at {}",
-                //     self.id,
-                //     recipient_id,
-                //     packet.routing_header.hops.last().unwrap(),
-                // ); // Logged after successfully sending a packet to a recipient. Shows the recipient and the final destination node of the packet.
-
                 // Notifies the simulation controller of packet sending.
                 let _ = self
                     .sim_controller_send
