@@ -216,7 +216,7 @@ impl DronegowskiClient {
                     .sim_controller_send
                     .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {} / {}", self.id, counter, id_drop_drone, nack.fragment_index)));
 
-                if *counter > 3 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
+                if *counter == 4 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
 
                     info!("Client {}: 4 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
 
@@ -234,7 +234,6 @@ impl DronegowskiClient {
                             if let Some(target_server) = packet.routing_header.hops.last() { // Gets the final destination server from the packet's routing header.
                                 if let Some(new_path) = self.compute_route_excluding(target_server) { // Computes a new route to the target server, excluding problematic nodes.
                                     // sending route to SC
-
 
                                     let _ = self
                                         .sim_controller_send
@@ -260,7 +259,7 @@ impl DronegowskiClient {
                         }
                     }
                     warn!("Client {}: Unable to find alternative path", self.id); // Logged as a warning if the client fails to find an alternative path after receiving too many NACKs. Indicates potential delivery issues.
-                } else {
+                } else if *counter<4 {
                     // Standard resend if NACK count is not too high
                     if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
                         if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
