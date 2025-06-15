@@ -185,8 +185,7 @@ impl DronegowskiClient {
                 }
             }
             PacketType::Nack(ref nack) => {
-                // Nack packets are not handled at the moment. It might be necessary to implement them for error handling.
-                // info!("Client {}: Received Nack (unhandled)", self.id); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
+                //info!("Client {}: Received Nack", self.id); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
                 let drop_drone = packet.clone().routing_header.hops[0];
                 // NACK HANDLING METHOD
                 self.handle_nack(nack.clone(), packet.session_id, drop_drone); // Handles Negative Acknowledgements (NACKs) for error recovery.
@@ -203,6 +202,9 @@ impl DronegowskiClient {
     /// * `session_id`: The session ID of the message.
     /// * `id_drop_drone`: The ID of the node that dropped the packet (indicated by the NACK).
     fn handle_nack(&mut self, nack: Nack, session_id: u64, id_drop_drone: NodeId) {
+        if (id_drop_drone == 1){
+            let _ = self.sim_controller_send.send(ClientEvent::ErrorMessage(self.id, format!("NACK from drone {}", id_drop_drone)));
+        }
         let key = (nack.fragment_index, session_id, id_drop_drone); // Key for NACK counter: (fragment index, session ID, dropping node).
 
         // Uses Entry to correctly handle counter initialization
