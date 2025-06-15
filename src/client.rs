@@ -247,7 +247,7 @@ impl DronegowskiClient {
                                         self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error, resends the fragment using the new path.
 
                                         // Reset the counter after rerouting
-                                        self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
+                                        // self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
                                         return;
                                     }
                                 }
@@ -816,7 +816,7 @@ impl DronegowskiClient {
     /// * `message`: The `TestMessage` to send.
     fn send_message_to_node(&mut self, target_id: &NodeId, message: TestMessage) {
         // Clear excluded nodes at the start of sending a new message
-        // self.excluded_nodes.clear(); // Clears the set of excluded nodes before sending a new message.
+        self.excluded_nodes.clear(); // Clears the set of excluded nodes before sending a new message.
 
         // Calculate the path to the destination node.
         if let Some(path) = self.compute_route(target_id) { // Computes a route to the target node.
