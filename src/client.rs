@@ -660,7 +660,7 @@ impl DronegowskiClient {
         //let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Client: {} - topology after last update", self))); // Invia al SC per visibilità
 
 
-        // --- INIZIO CODICE DA AGGIUNGERE (STAMPA SU CONSOLE) ---
+        // --- INIZIO BLOCCO AGGIORNATO (STAMPA SU CONSOLE) ---
 
         // Usiamo una stampa chiaramente identificabile per il debug
         println!("\n============================================================");
@@ -675,47 +675,118 @@ impl DronegowskiClient {
         );
         println!("------------------------------------------------------------");
 
-        let mut found_paths = false;
+        let mut found_servers = false;
 
-        // Itera su tutti i nodi conosciuti per trovare i server e calcolare il percorso
+        // Itera su tutti i nodi conosciuti per trovare i server e calcolare i percorsi
         for (&node_id, &node_type) in &self.node_types {
             // Ci interessano solo i percorsi verso i server
-            if node_type == wg_2024::packet::NodeType::Server {
-                found_paths = true;
-                match self.compute_route(&node_id) {
-                    Some(path) => {
-                        // Formatta il percorso in una stringa leggibile "A -> B -> C"
+            if node_type == NodeType::Server {
+                found_servers = true;
+
+                // Chiama la nuova funzione per ottenere TUTTI i percorsi
+                let all_paths_to_server = self.compute_all_routes(&node_id);
+
+                if !all_paths_to_server.is_empty() {
+                    println!(
+                        "      | Trovati {} percorsi per Server {}:",
+                        all_paths_to_server.len(),
+                        node_id
+                    );
+                    // Stampa ogni percorso trovato
+                    for (i, path) in all_paths_to_server.iter().enumerate() {
                         let path_str = path
                             .iter()
                             .map(|id| id.to_string())
                             .collect::<Vec<String>>()
                             .join(" -> ");
 
-                        println!(
-                            "      | [OK]   Percorso per Server {}: {}",
-                            node_id, path_str
-                        );
+                        println!("      |   {}) {}", i + 1, path_str);
                     }
-                    None => {
-                        // È un'informazione critica se un server conosciuto non è raggiungibile
-                        println!(
-                            "      | [FAIL] NESSUN percorso trovato per Server {}",
-                            node_id
-                        );
-                    }
+                } else {
+                    // È un'informazione critica se un server conosciuto non è raggiungibile
+                    println!(
+                        "      | [FAIL] NESSUN percorso trovato per Server {}",
+                        node_id
+                    );
                 }
             }
         }
 
-        if !found_paths {
+        if !found_servers {
             println!("      | Nessun server trovato nella topologia conosciuta.");
         }
 
         println!("============================================================\n");
 
-        // --- FINE CODICE DA AGGIUNGERE ---
+        // --- FINE BLOCCO AGGIORNATO ---
 
     }
+
+    // NUOVA FUNZIONE PUBBLICA
+    /// Calcola tutti i percorsi semplici (senza cicli) verso un server di destinazione.
+    ///
+    /// # Returns
+    ///
+    /// `Vec<Vec<NodeId>>` contenente tutti i percorsi trovati. La lista può essere vuota.
+    fn compute_all_routes(&self, target_server: &NodeId) -> Vec<Vec<NodeId>> {
+        let mut all_paths = Vec::new();
+        let mut current_path = vec![self.id];
+        self.find_paths_recursive(*target_server, &mut current_path, &mut all_paths);
+        all_paths
+    }
+
+    // NUOVA FUNZIONE HELPER RICORSIVA (PRIVATA)
+    /// Funzione ricorsiva (DFS) per trovare tutti i percorsi.
+    fn find_paths_recursive(
+        &self,
+        target: NodeId,
+        current_path: &mut Vec<NodeId>,
+        all_paths: &mut Vec<Vec<NodeId>>,
+    ) {
+        // L'ultimo nodo nel percorso attuale è il nostro "nodo corrente"
+        let last_node = *current_path.last().unwrap();
+
+        // Caso base: abbiamo raggiunto la destinazione
+        if last_node == target {
+            all_paths.push(current_path.clone());
+            return;
+        }
+
+        // Passo ricorsivo: esplora i vicini
+        for &(node_a, node_b) in &self.topology {
+            let neighbor = if node_a == last_node {
+                node_b
+            } else if node_b == last_node {
+                node_a
+            } else {
+                continue; // Questo link non riguarda il nostro nodo corrente
+            };
+
+            // 1. Controllo anti-ciclo: non visitare un nodo già presente nel percorso attuale.
+            if current_path.contains(&neighbor) {
+                continue;
+            }
+
+            // 2. Controllo tipo di nodo: non passare attraverso altri client a meno che non siano la destinazione finale.
+            if let Some(node_type) = self.node_types.get(&neighbor) {
+                if *node_type == wg_2024::packet::NodeType::Client && neighbor != target {
+                    continue;
+                }
+            } else {
+                // Se non conosciamo il tipo di nodo, per sicurezza lo saltiamo.
+                continue;
+            }
+
+            // Se i controlli passano, esplora questo vicino
+            current_path.push(neighbor);
+            self.find_paths_recursive(target, current_path, all_paths);
+
+            // BACKTRACKING: Rimuovi il vicino dal percorso attuale per poter esplorare
+            // altri rami a partire da `last_node`. Questo è il cuore del DFS.
+            current_path.pop();
+        }
+    }
+
 
     /// Calculates a route from the client to the target server using BFS.
     ///
