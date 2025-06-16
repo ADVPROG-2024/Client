@@ -138,7 +138,10 @@ impl DronegowskiClient {
             ClientCommand::ClientList(node_id) => self.request_client_list(&node_id), // Requests client list from a specific node.
             ClientCommand::RegistrationToChat(node_id) => self.register_with_server(&node_id), // Registers with a chat server.
             ClientCommand::MessageFor(node_id, client_id, message) => self.send_message(&node_id, client_id, message), // Sends a message to another client via a server.
-            ClientCommand::RequestNetworkDiscovery => self.server_discovery(), // Initiates network discovery.
+            ClientCommand::RequestNetworkDiscovery => {
+                warn!("Client {} SC requested me network discovery", self.id);
+                self.server_discovery() // Initiates network discovery.
+            }
             ClientCommand::ControllerShortcut(packet) => self.handle_packet(packet), // Handles a packet directly sent from the controller (for testing or specific scenarios).
         }
     }
