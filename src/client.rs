@@ -205,8 +205,6 @@ impl DronegowskiClient {
     fn handle_nack(&mut self, nack: Nack, session_id: u64, id_drop_drone: NodeId) {
         let key = (nack.fragment_index, session_id, id_drop_drone); // Key for NACK counter: (fragment index, session ID, dropping node).
 
-
-
         // Uses Entry to correctly handle counter initialization
         let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
         *counter += 1; // Increments the NACK counter.
@@ -254,7 +252,7 @@ impl DronegowskiClient {
                                         self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error, resends the fragment using the new path.
 
                                         // Reset the counter after rerouting
-                                        self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
+                                        // self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
                                         return;
                                     }
                                 }
