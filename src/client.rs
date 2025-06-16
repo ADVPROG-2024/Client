@@ -605,31 +605,31 @@ impl DronegowskiClient {
 
     /// Sends a Flood request to discover servers.
     pub fn server_discovery(&mut self) {
-        // info!("Client {}: Starting server discovery", self.id); // Logged when the server discovery process is initiated by the client.
+        info!("Client {}: SERVER_DISCOVERY_START. Current packet_send: {:?}", self.id, self.packet_send.keys());
+        self.topology.clear();
+        self.node_types.clear();
+        // self.seen_flood_ids_for_forwarding.clear(); // Se implementi il tracking dei flood_id inoltrati
 
-        // CLEAR CLIENT TOPOLOGY
-        self.topology.clear(); // Clears the current network topology knowledge.
-        self.node_types.clear(); // Clears the current node type knowledge.
-
-        let flood_request = FloodRequest {
-            flood_id: generate_unique_id(), // Generates a unique ID for the flood request.
-            initiator_id: self.id, // Sets the initiator ID to the client's own ID.
-            path_trace: vec![(self.id, NodeType::Client)], // Initializes path trace with the client's own node and type.
+        let flood_request_core = FloodRequest { // Rinominato per chiarezza
+            flood_id: generate_unique_id(),
+            initiator_id: self.id,
+            path_trace: vec![(self.id, NodeType::Client)],
         };
+        info!("Client {}: Generated FloodRequest with flood_id: {}", self.id, flood_request_core.flood_id);
 
-        // Sends a Flood request to all neighbors.
-        for (&node_id, _) in &self.packet_send { // Iterates through all known neighbors.
-            // info!("Client {}: Sending FloodRequest to node {}", self.id, node_id); // Logged before sending a FloodRequest packet to each neighbor. Indicates the start of the flood process to discover network topology.
+        for (&node_id, _) in &self.packet_send {
+            info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
             let packet = Packet {
-                pack_type: PacketType::FloodRequest(flood_request.clone()), // Sets packet type to FloodRequest.
+                pack_type: PacketType::FloodRequest(flood_request_core.clone()),
                 routing_header: SourceRoutingHeader {
                     hop_index: 0,
-                    hops: vec![self.id, node_id], // Sets routing header with path from client to neighbor.
+                    hops: vec![self.id, node_id],
                 },
-                session_id: flood_request.flood_id, // Sets session ID to the flood request ID.
+                session_id: flood_request_core.flood_id,
             };
-            self.send_packet_and_notify(packet, node_id); // Sends the FloodRequest packet to the neighbor.
+            self.send_packet_and_notify(packet, node_id);
         }
+        info!("Client {}: SERVER_DISCOVERY_END.", self.id);
     }
 
     /// Updates the network topology and node types based on the received path_trace.
@@ -638,21 +638,21 @@ impl DronegowskiClient {
     ///
     /// * `path_trace`: A vector of (NodeId, NodeType) representing the discovered path.
     fn update_graph(&mut self, path_trace: Vec<(NodeId, NodeType)>) {
-        // info!("Client {}: Updating graph with: {:?}", self.id, path_trace); // Logged when the client is updating its network topology graph based on a received `path_trace`. Shows the path trace being used to update the graph.
-        // Adds edges to the graph (bidirectional).
-        for i in 0..path_trace.len() - 1 { // Iterates through the path trace to extract edges.
+        info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
+        for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
             let (node_b, _) = path_trace[i + 1];
-            self.topology.insert((node_a, node_b)); // Adds edge (a, b) to the topology.
-            self.topology.insert((node_b, node_a)); // Adds edge (b, a) to make it bidirectional.
+            // Solo per log, non influenza la logica
+            // info!("Client {}: Adding edge ({}, {:?}) <-> ({}, {:?}) to topology", self.id, node_a, type_a, node_b, type_b);
+            self.topology.insert((node_a, node_b));
+            self.topology.insert((node_b, node_a));
         }
-        debug!("Client {}: Updated topology: {:?}", self.id, self.topology); // Debug log showing the updated topology after processing a path trace. Useful for detailed network analysis.
 
-        // Updates node types.
-        for (node_id, node_type) in path_trace { // Iterates through the path trace to update node types.
-            self.node_types.insert(node_id, node_type); // Inserts or updates the node type in the node_types map.
+        for (node_id, node_type) in path_trace { // Considera se vuoi loggare anche questo
+            self.node_types.insert(node_id, node_type);
         }
-        debug!("Client {}: Updated node types: {:?}", self.id, self.node_types); // Debug log showing the updated node types after processing a path trace. Useful for detailed network analysis.
+        debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
+        let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Updated Topology: {:?}", self.topology))); // Invia al SC per visibilità
     }
 
     /// Calculates a route from the client to the target server using BFS.
