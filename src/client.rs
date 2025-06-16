@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crossbeam_channel::{select, select_biased, Receiver, Sender};
+use crossbeam_channel::{select_biased, Receiver, Sender};
 use dronegowski_utils::functions::{
     assembler, fragment_message, generate_unique_id,
 };
@@ -94,7 +94,7 @@ impl DronegowskiClient {
     /// Uses `select_biased` to prioritize packet reception.
     pub fn run(&mut self) {
         loop {
-            select! {
+            select_biased! {
                 recv(self.packet_recv) -> packet_res => {
                     if let Ok(packet) = packet_res {
                         self.handle_packet(packet);
