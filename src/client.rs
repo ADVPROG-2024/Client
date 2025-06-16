@@ -616,7 +616,7 @@ impl DronegowskiClient {
         // self.seen_flood_ids_for_forwarding.clear(); // Se implementi il tracking dei flood_id inoltrati
 
         let flood_request_core = FloodRequest { // Rinominato per chiarezza
-            flood_id: generate_unique_id() + self.id as u64,
+            flood_id: generate_unique_id() + (self.id as u64*31),
             initiator_id: self.id,
             path_trace: vec![(self.id, NodeType::Client)],
         };
