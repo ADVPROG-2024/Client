@@ -632,7 +632,7 @@ impl DronegowskiClient {
         // info!("Client {}: Generated FloodRequest with flood_id: {}", self.id, flood_request_core.flood_id);
 
         for (&node_id, _) in &self.packet_send {
-            // info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
+            info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
             let packet = Packet {
                 pack_type: PacketType::FloodRequest(flood_request_core.clone()),
                 routing_header: SourceRoutingHeader {
@@ -652,7 +652,7 @@ impl DronegowskiClient {
     ///
     /// * `path_trace`: A vector of (NodeId, NodeType) representing the discovered path.
     fn update_graph(&mut self, path_trace: Vec<(NodeId, NodeType)>) {
-        info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
+        // info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
         for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
             let (node_b, _) = path_trace[i + 1];
