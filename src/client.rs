@@ -655,7 +655,66 @@ impl DronegowskiClient {
             self.node_types.insert(node_id, node_type);
         }
         debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
-        // let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Client: {} - topo update", self.id))); // Invia al SC per visibilità
+
+        //QUESTA è LA PARTE CHE TI CHIEDO DI FARE
+        //let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Client: {} - topology after last update", self))); // Invia al SC per visibilità
+
+
+        // --- INIZIO CODICE DA AGGIUNGERE (STAMPA SU CONSOLE) ---
+
+        // Usiamo una stampa chiaramente identificabile per il debug
+        println!("\n============================================================");
+        println!(
+            "DEBUG | Client {}: Analisi percorsi dopo aggiornamento della topologia",
+            self.id
+        );
+        println!(
+            "      | Nodi conosciuti: {}, Link conosciuti: {}",
+            self.node_types.len(),
+            self.topology.len()
+        );
+        println!("------------------------------------------------------------");
+
+        let mut found_paths = false;
+
+        // Itera su tutti i nodi conosciuti per trovare i server e calcolare il percorso
+        for (&node_id, &node_type) in &self.node_types {
+            // Ci interessano solo i percorsi verso i server
+            if node_type == wg_2024::packet::NodeType::Server {
+                found_paths = true;
+                match self.compute_route(&node_id) {
+                    Some(path) => {
+                        // Formatta il percorso in una stringa leggibile "A -> B -> C"
+                        let path_str = path
+                            .iter()
+                            .map(|id| id.to_string())
+                            .collect::<Vec<String>>()
+                            .join(" -> ");
+
+                        println!(
+                            "      | [OK]   Percorso per Server {}: {}",
+                            node_id, path_str
+                        );
+                    }
+                    None => {
+                        // È un'informazione critica se un server conosciuto non è raggiungibile
+                        println!(
+                            "      | [FAIL] NESSUN percorso trovato per Server {}",
+                            node_id
+                        );
+                    }
+                }
+            }
+        }
+
+        if !found_paths {
+            println!("      | Nessun server trovato nella topologia conosciuta.");
+        }
+
+        println!("============================================================\n");
+
+        // --- FINE CODICE DA AGGIUNGERE ---
+
     }
 
     /// Calculates a route from the client to the target server using BFS.
