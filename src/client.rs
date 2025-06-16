@@ -652,7 +652,7 @@ impl DronegowskiClient {
             self.node_types.insert(node_id, node_type);
         }
         debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
-        let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("TOPOLOGIA AGGIORNATA"))); // Invia al SC per visibilità
+        let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Client: {} - topo update", self.id))); // Invia al SC per visibilità
     }
 
     /// Calculates a route from the client to the target server using BFS.
