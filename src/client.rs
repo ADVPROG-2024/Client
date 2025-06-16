@@ -214,8 +214,18 @@ impl DronegowskiClient {
 
             // Se abbiamo ricevuto troppi NACK per questo specifico drone e frammento...
             if *counter > RETRY_LIMIT {
+
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {} / {}", self.id, counter, id_drop_drone, nack.fragment_index)));
+                
                 info!("Client {}: Limite NACK ({}) superato per il drone {}. Lo escludo e ricalcolo il percorso per l'intera sessione.", self.id, RETRY_LIMIT, id_drop_drone);
                 self.excluded_nodes.insert(id_drop_drone);
+
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route exclude {:?}", self.id, self.excluded_nodes)));
+                
                 self.nack_counter.remove(&key); // Rimuoviamo questo contatore, il drone è escluso
 
                 // Tentiamo di trovare una nuova rotta e aggiornare la sessione
@@ -237,8 +247,17 @@ impl DronegowskiClient {
             }
         } else {
             // Altri tipi di NACK: tentiamo subito un ricalcolo del percorso
-            warn!("Client {}: Ricevuto NACK di tipo {:?}. Tento un ricalcolo del percorso.", self.id, nack.nack_type);
-            self.resend_with_new_path(session_id, nack.fragment_index);
+            self.server_discovery(); // Re-initiates server discovery, potentially network topology has changed.
+            // compute new route
+            let _ = self
+                .sim_controller_send
+                .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route?", self.id)));
+
+            if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
+                if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
+                    self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
+                }
+            }
         }
     }
 
