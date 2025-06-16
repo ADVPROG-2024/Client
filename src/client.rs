@@ -278,11 +278,11 @@ impl DronegowskiClient {
                     .sim_controller_send
                     .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route?", self.id)));
 
-                // if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
-                //     if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
-                //         self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
-                //     }
-                // }
+                if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
+                    if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
+                        self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
+                    }
+                }
             }
         }
     }
@@ -616,7 +616,7 @@ impl DronegowskiClient {
         // self.seen_flood_ids_for_forwarding.clear(); // Se implementi il tracking dei flood_id inoltrati
 
         let flood_request_core = FloodRequest { // Rinominato per chiarezza
-            flood_id: generate_unique_id(),
+            flood_id: generate_unique_id() + self.id as u64,
             initiator_id: self.id,
             path_trace: vec![(self.id, NodeType::Client)],
         };
@@ -647,7 +647,7 @@ impl DronegowskiClient {
         for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
             let (node_b, _) = path_trace[i + 1];
-            // Solo per log, non influenza la logicaa
+            // Solo per log, non influenza la logica
             // info!("Client {}: Adding edge ({}, {:?}) <-> ({}, {:?}) to topology", self.id, node_a, type_a, node_b, type_b);
             self.topology.insert((node_a, node_b));
             self.topology.insert((node_b, node_a));
