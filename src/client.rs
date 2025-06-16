@@ -209,8 +209,6 @@ impl DronegowskiClient {
         let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
         *counter += 1; // Increments the NACK counter.
 
-
-
         match nack.nack_type {
             NackType::Dropped => {
                 if *counter == 4 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
@@ -654,7 +652,7 @@ impl DronegowskiClient {
     ///
     /// * `path_trace`: A vector of (NodeId, NodeType) representing the discovered path.
     fn update_graph(&mut self, path_trace: Vec<(NodeId, NodeType)>) {
-        // info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
+        info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
         for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
             let (node_b, _) = path_trace[i + 1];
