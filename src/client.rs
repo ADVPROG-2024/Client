@@ -243,7 +243,7 @@ impl DronegowskiClient {
 
                                         self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error, resends the fragment using the new path.
 
-                                        // Reset the counter after rerouting
+                                        // Reset the counter after re-routing
                                         self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
                                         return;
                                     }
