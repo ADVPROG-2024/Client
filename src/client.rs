@@ -205,7 +205,7 @@ impl DronegowskiClient {
     fn handle_nack(&mut self, nack: Nack, session_id: u64, id_drop_drone: NodeId) {
         let key = (nack.fragment_index, session_id, id_drop_drone); // Key for NACK counter: (fragment index, session ID, dropping node).
 
-        info!("DIO CANEEEEE - Client {} - KEY: {}", self.id, key);
+        info!("DIO CANEEEEE - Client {} - KEY: {:?}", self.id, key);
 
         // Uses Entry to correctly handle counter initialization
         let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
