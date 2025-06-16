@@ -272,7 +272,6 @@ impl DronegowskiClient {
             }
             _ => {
                 // Handling other NACK types (e.g., Corrupted). For now, triggers server discovery and resends fragment.
-                self.server_discovery(); // Re-initiates server discovery, potentially network topology has changed.
                 if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
                     if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
                         self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
