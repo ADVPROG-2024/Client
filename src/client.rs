@@ -186,7 +186,7 @@ impl DronegowskiClient {
                 }
             }
             PacketType::Nack(ref nack) => {
-                //info!("Client {}: Received Nack", self.id); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
+                info!("PORCO DIOOOO Client {}: Received Nack, {}", self.id, packet.clone().routing_header.hops); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
                 let drop_drone = packet.clone().routing_header.hops[0];
                 // NACK HANDLING METHOD
                 self.handle_nack(nack.clone(), packet.session_id, drop_drone); // Handles Negative Acknowledgements (NACKs) for error recovery.
@@ -204,6 +204,8 @@ impl DronegowskiClient {
     /// * `id_drop_drone`: The ID of the node that dropped the packet (indicated by the NACK).
     fn handle_nack(&mut self, nack: Nack, session_id: u64, id_drop_drone: NodeId) {
         let key = (nack.fragment_index, session_id, id_drop_drone); // Key for NACK counter: (fragment index, session ID, dropping node).
+
+        info!("DIO CANEEEEE - Client {} - KEY: {}", self.id, key);
 
         // Uses Entry to correctly handle counter initialization
         let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
@@ -250,7 +252,7 @@ impl DronegowskiClient {
                                         self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error, resends the fragment using the new path.
 
                                         // Reset the counter after rerouting
-                                        // self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
+                                        self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
                                         return;
                                     }
                                 }
@@ -632,7 +634,7 @@ impl DronegowskiClient {
         // info!("Client {}: Generated FloodRequest with flood_id: {}", self.id, flood_request_core.flood_id);
 
         for (&node_id, _) in &self.packet_send {
-            info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
+            // info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
             let packet = Packet {
                 pack_type: PacketType::FloodRequest(flood_request_core.clone()),
                 routing_header: SourceRoutingHeader {
@@ -959,7 +961,7 @@ impl DronegowskiClient {
     ///
     /// * `server_id`: The ID of the server to request the type from.
     pub fn request_server_type(&mut self, server_id: &NodeId) {
-        info!("Client {}: Requesting server type from server {}", self.id, server_id); // Logged when the client is requesting the type of a server (e.g., web or chat server).
+        // info!("Client {}: Requesting server type from server {}", self.id, server_id); // Logged when the client is requesting the type of a server (e.g., web or chat server).
         self.send_client_message_to_server(server_id, ClientMessages::ServerType); // Sends a server type request to the specified server.
     }
 
@@ -1074,7 +1076,7 @@ impl DronegowskiClient {
             }
         };
 
-        info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
+        // info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
 
         // // Gets the sender ID.
         // let source_id = match packet.routing_header.source() {
