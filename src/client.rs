@@ -266,7 +266,7 @@ impl DronegowskiClient {
                     // Standard resend if NACK count is not too high
                     if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
                         if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
-                            // info!("Client {}: Attempt {} for fragment {}",
+                            info!("MADONNNA PUTTANNA: rimando {:?}", packet.routing_header);
                             // self.id, counter, nack.fragment_index); // Logged before resending a fragment after receiving a NACK, indicating the attempt number for retransmission.
                             self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
                         }
