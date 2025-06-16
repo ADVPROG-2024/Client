@@ -124,12 +124,10 @@ impl DronegowskiClient {
             ClientCommand::RemoveSender(node_id) => {
                 // Removes a neighbor and re-executes server discovery to update network knowledge.
                 self.remove_neighbor(&node_id);
-                self.server_discovery();
             }
             ClientCommand::AddSender(node_id, packet_sender) => {
                 // Adds a neighbor and re-executes server discovery to update network knowledge.
                 self.add_neighbor(node_id, packet_sender);
-                self.server_discovery();
             }
             ClientCommand::ServerType(node_id) => self.request_server_type(&node_id), // Requests server type from a specific node.
             ClientCommand::FilesList(node_id) => self.request_file_list(&node_id),   // Requests file list from a specific node.
@@ -881,6 +879,7 @@ impl DronegowskiClient {
         if self.packet_send.insert(node_id, sender).is_some() { // Inserts the neighbor and sender channel into the packet_send map.
             warn!("Client {}: Replaced existing sender for node {}", self.id, node_id); // Logged as a warning if adding a neighbor replaces an existing entry for the same node ID. Indicates a potential configuration update or change in neighbors.
         }
+        self.server_discovery();
     }
 
     /// Removes a neighbor from the sender map.
@@ -893,6 +892,7 @@ impl DronegowskiClient {
         if self.packet_send.remove(node_id).is_none() { // Removes the neighbor from the packet_send map.
             warn!("Client {}: Node {} was not a neighbor.", self.id, node_id); // Logged as a warning if an attempt is made to remove a neighbor that is not currently in the neighbor list. Indicates an inconsistency in neighbor management.
         }
+        self.server_discovery();
     }
 
     /// Handles a received `FloodRequest`.
