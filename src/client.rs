@@ -642,7 +642,7 @@ impl DronegowskiClient {
         for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
             let (node_b, _) = path_trace[i + 1];
-            // Solo per log, non influenza la logica
+            // Solo per log, non influenza la logicaa
             // info!("Client {}: Adding edge ({}, {:?}) <-> ({}, {:?}) to topology", self.id, node_a, type_a, node_b, type_b);
             self.topology.insert((node_a, node_b));
             self.topology.insert((node_b, node_a));
