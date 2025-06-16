@@ -155,11 +155,11 @@ impl DronegowskiClient {
         match packet.pack_type {
             PacketType::MsgFragment(_) => self.handle_message_fragment(packet), // Handles message fragments for reassembly.
             PacketType::FloodResponse(flood_response) => {
-                // info!(
-                //     "Client {}: Received FloodResponse: {:?}",
-                //     self.id,
-                //     flood_response
-                // ); // Logged when the client receives a FloodResponse packet.  Indicates that a server discovery process is underway and the client is receiving network topology information.
+                info!(
+                    "Client {}: Received FloodResponse: {:?}",
+                    self.id,
+                    flood_response
+                ); // Logged when the client receives a FloodResponse packet.  Indicates that a server discovery process is underway and the client is receiving network topology information.
                 self.update_graph(flood_response.path_trace); // Updates network topology based on FloodResponse.
             }
             PacketType::FloodRequest(_) => self.handle_flood_request(packet), // Handles flood requests to participate in network discovery.
@@ -186,7 +186,7 @@ impl DronegowskiClient {
                 }
             }
             PacketType::Nack(ref nack) => {
-                //info!("Client {}: Received Nack", self.id); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
+                info!("PORCO DIOOOO Client {}: Received Nack, {:?}", self.id, packet.clone().routing_header.hops); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
                 let drop_drone = packet.clone().routing_header.hops[0];
                 // NACK HANDLING METHOD
                 self.handle_nack(nack.clone(), packet.session_id, drop_drone); // Handles Negative Acknowledgements (NACKs) for error recovery.
@@ -203,78 +203,93 @@ impl DronegowskiClient {
     /// * `session_id`: The session ID of the message.
     /// * `id_drop_drone`: The ID of the node that dropped the packet (indicated by the NACK).
     fn handle_nack(&mut self, nack: Nack, session_id: u64, id_drop_drone: NodeId) {
-        // La logica del NackType::Dropped è la più critica, gestiamola per prima.
-        if let NackType::Dropped = nack.nack_type {
-            let key = (nack.fragment_index, session_id, id_drop_drone);
-            let counter = self.nack_counter.entry(key).or_insert(0);
-            *counter += 1;
+        let key = (nack.fragment_index, session_id, id_drop_drone); // Key for NACK counter: (fragment index, session ID, dropping node).
 
-            // Limite di tentativi sullo stesso percorso
-            const RETRY_LIMIT: u8 = 3;
 
-            // Log per il debug
-            let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!(
-                "Client {}: NACK #{} per frammento {} da {}. Esclusi: {:?}",
-                self.id, *counter, nack.fragment_index, id_drop_drone, self.excluded_nodes
-            )));
 
-            // Se abbiamo ricevuto troppi NACK, dobbiamo cambiare strategia.
-            if *counter > RETRY_LIMIT {
-                info!("Client {}: Limite NACK superato per il drone {}. Lo escludo temporaneamente e ricalcolo il percorso.", self.id, id_drop_drone);
-                self.excluded_nodes.insert(id_drop_drone);
+        // Uses Entry to correctly handle counter initialization
+        let counter = self.nack_counter.entry(key).or_insert(0); // Gets or initializes the NACK counter for this fragment, session and dropping node.
+        *counter += 1; // Increments the NACK counter.
 
-                // Rimuoviamo il contatore per questo drone, dato che non lo useremo più per un po'.
-                self.nack_counter.remove(&key);
+        info!("DIO CANEEEEE bastardo - Client {} - counter: {:?}, dropid {}", self.id, counter, id_drop_drone);
 
-                // Tentiamo di inviare con un nuovo percorso
-                self.resend_with_new_path(session_id, nack.fragment_index);
-                return; // Usciamo dopo aver tentato il rinvio con nuovo percorso.
-            }
+        match nack.nack_type {
+            NackType::Dropped => {
+                if *counter == 4 { // If NACK count exceeds 5 for a dropped fragment, consider alternative routing.
 
-            // Se siamo sotto il limite, proviamo a rinviare sullo stesso percorso.
-            info!("Client {}: Tentativo #{}. Rinviando frammento {} sullo stesso percorso.", self.id, *counter, nack.fragment_index);
-            if let Some(fragments) = self.pending_messages.get(&session_id) {
-                if let Some(packet) = fragments.get(nack.fragment_index as usize) {
-                    self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]);
+                    let _ = self
+                        .sim_controller_send
+                        .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {} / {}", self.id, counter, id_drop_drone, nack.fragment_index)));
+
+                    // info!("Client {}: 4 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
+
+
+                    // Add the problematic node to excluded nodes
+                    self.excluded_nodes.insert(id_drop_drone); // Adds the node that dropped the packet to the set of excluded nodes.
+
+                    let _ = self
+                        .sim_controller_send
+                        .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route exclude {:?}", self.id, self.excluded_nodes)));
+
+                    // Reconstruct the packet with a new path
+                    if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves the pending message fragments for the session.
+                        if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the specific fragment that was NACKed.
+                            if let Some(target_server) = packet.routing_header.hops.last() { // Gets the final destination server from the packet's routing header.
+                                if let Some(new_path) = self.compute_route_excluding(target_server) { // Computes a new route to the target server, excluding problematic nodes.
+                                    // sending route to SC
+
+                                    let _ = self
+                                        .sim_controller_send
+                                        .send(ClientEvent::Route(new_path.clone()));
+
+                                    let mut new_packet = packet.clone();
+                                    new_packet.routing_header.hops = new_path; // Updates the packet's routing header with the new path.
+                                    new_packet.routing_header.hop_index = 1; // Resets hop index for the new path.
+
+                                    if let Some(next_hop) = new_packet.routing_header.hops.get(1) { // Gets the next hop in the new path.
+                                        // info!("Client {}: Resending fragment {} via new path: {:?}",
+                                        //    self.id, nack.fragment_index, new_packet.routing_header.hops); // Logged when a fragment is being resent using an alternative path due to excessive NACKs. Shows the new path being used.
+                                        // add Client event
+
+                                        self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error, resends the fragment using the new path.
+
+                                        // Reset the counter after rerouting
+                                        self.nack_counter.remove(&key); // Resets the NACK counter for this fragment after successful rerouting.
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    warn!("Client {}: Unable to find alternative path", self.id); // Logged as a warning if the client fails to find an alternative path after receiving too many NACKs. Indicates potential delivery issues.
+                } else if *counter<4 {
+                    // Standard resend if NACK count is not too high
+                    if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
+                        if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
+                            // info!("Client {}: Attempt {} for fragment {}",
+                            // self.id, counter, nack.fragment_index); // Logged before resending a fragment after receiving a NACK, indicating the attempt number for retransmission.
+                            self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
+                        }
+                    }
                 }
             }
-        } else {
-            // Gestione per altri tipi di NACK (es. Corrupted, ErrorInRouting)
-            // Qui la strategia potrebbe essere diversa, ad esempio, forzare subito un ricalcolo del percorso
-            // o una nuova scoperta della rete.
-            warn!("Client {}: Ricevuto NACK di tipo non gestito {:?}. Forzo una nuova scoperta della rete.", self.id, nack.nack_type);
-            self.server_discovery(); // Riscoprire la rete potrebbe aggiornare la topologia
-            self.resend_with_new_path(session_id, nack.fragment_index); // Provo a rinviare
-        }
-    }
+            _ => {
+                // Handling other NACK types (e.g., Corrupted). For now, triggers server discovery and resends fragment.
+                self.server_discovery(); // Re-initiates server discovery, potentially network topology has changed.
+                // compute new route
+                let _ = self
+                    .sim_controller_send
+                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route?", self.id)));
 
-    fn resend_with_new_path(&mut self, session_id: u64, fragment_index: u64) {
-        if let Some(fragments) = self.pending_messages.get(&session_id) {
-            if let Some(packet) = fragments.get(fragment_index as usize) {
-                // Ottieni la destinazione finale dal pacchetto originale
-                if let Some(&target_server) = packet.routing_header.hops.last() {
-                    // Calcola un nuovo percorso escludendo i nodi in self.excluded_nodes
-                    if let Some(new_path) = self.compute_route_excluding(&target_server) {
-                        info!("Client {}: Trovato nuovo percorso per il frammento {}: {:?}", self.id, fragment_index, new_path);
-                        let mut new_packet = packet.clone();
-                        new_packet.routing_header.hops = new_path;
-                        new_packet.routing_header.hop_index = 1;
-
-                        if let Some(&next_hop) = new_packet.routing_header.hops.get(1) {
-                            // Invia il pacchetto sul nuovo percorso
-                            self.send_packet_and_notify(new_packet, next_hop);
-                        } else {
-                            error!("Client {}: Il nuovo percorso calcolato è invalido per il frammento {}.", self.id, fragment_index);
-                        }
-                    } else {
-                        // Se non si trova nessun percorso, questo è un errore grave.
-                        warn!("Client {}: Impossibile trovare un percorso alternativo per il frammento {}. Il messaggio potrebbe fallire.", self.id, fragment_index);
-                        let _ = self.sim_controller_send.send(ClientEvent::Error(self.id, format!("No alternative path for fragment {}", fragment_index)));
+                if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
+                    if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
+                        self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
                     }
                 }
             }
         }
     }
+
     // New function for calculating paths excluding nodes
     /// Computes a route to a target server, excluding nodes that have been marked as problematic (excluded_nodes).
     ///
@@ -608,7 +623,7 @@ impl DronegowskiClient {
 
     /// Sends a Flood request to discover servers.
     pub fn server_discovery(&mut self) {
-        info!("Client {}: SERVER_DISCOVERY_START. Current packet_send: {:?}", self.id, self.packet_send.keys());
+        // info!("Client {}: SERVER_DISCOVERY_START. Current packet_send: {:?}", self.id, self.packet_send.keys());
         self.topology.clear();
         self.node_types.clear();
         // self.seen_flood_ids_for_forwarding.clear(); // Se implementi il tracking dei flood_id inoltrati
@@ -618,10 +633,10 @@ impl DronegowskiClient {
             initiator_id: self.id,
             path_trace: vec![(self.id, NodeType::Client)],
         };
-        info!("Client {}: Generated FloodRequest with flood_id: {}", self.id, flood_request_core.flood_id);
+        // info!("Client {}: Generated FloodRequest with flood_id: {}", self.id, flood_request_core.flood_id);
 
         for (&node_id, _) in &self.packet_send {
-            info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
+            // info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
             let packet = Packet {
                 pack_type: PacketType::FloodRequest(flood_request_core.clone()),
                 routing_header: SourceRoutingHeader {
@@ -632,7 +647,7 @@ impl DronegowskiClient {
             };
             self.send_packet_and_notify(packet, node_id);
         }
-        info!("Client {}: SERVER_DISCOVERY_END.", self.id);
+        // info!("Client {}: SERVER_DISCOVERY_END.", self.id);
     }
 
     /// Updates the network topology and node types based on the received path_trace.
@@ -641,7 +656,7 @@ impl DronegowskiClient {
     ///
     /// * `path_trace`: A vector of (NodeId, NodeType) representing the discovered path.
     fn update_graph(&mut self, path_trace: Vec<(NodeId, NodeType)>) {
-        info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
+        // info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
         for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
             let (node_b, _) = path_trace[i + 1];
@@ -654,7 +669,7 @@ impl DronegowskiClient {
         for (node_id, node_type) in path_trace { // Considera se vuoi loggare anche questo
             self.node_types.insert(node_id, node_type);
         }
-        debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
+        // debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
 
         //QUESTA è LA PARTE CHE TI CHIEDO DI FARE
         //let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Client: {} - topology after last update", self))); // Invia al SC per visibilità
@@ -663,6 +678,7 @@ impl DronegowskiClient {
         // --- INIZIO BLOCCO AGGIORNATO (STAMPA SU CONSOLE) ---
 
         // Usiamo una stampa chiaramente identificabile per il debug
+
         println!("\n============================================================");
         println!(
             "DEBUG | Client {}: Analisi percorsi dopo aggiornamento della topologia",
@@ -953,7 +969,7 @@ impl DronegowskiClient {
     ///
     /// * `server_id`: The ID of the server to request the type from.
     pub fn request_server_type(&mut self, server_id: &NodeId) {
-        info!("Client {}: Requesting server type from server {}", self.id, server_id); // Logged when the client is requesting the type of a server (e.g., web or chat server).
+        // info!("Client {}: Requesting server type from server {}", self.id, server_id); // Logged when the client is requesting the type of a server (e.g., web or chat server).
         self.send_client_message_to_server(server_id, ClientMessages::ServerType); // Sends a server type request to the specified server.
     }
 
@@ -985,7 +1001,7 @@ impl DronegowskiClient {
             if let (Some(next_hop), true) = (path.get(1), path.len() > 1) { // Checks if there is a valid next hop in the calculated path.
                 if let Some(_) = self.packet_send.get(next_hop) { // Checks if there is a sender channel for the next hop.
                     for packet in fragments { // Iterates through each fragment.
-                        info!("Client {}: Sending packet to next hop {}", self.id, *next_hop); // Logged before sending each fragment of a message to the next hop in the calculated path.
+                        // info!("Client {}: Sending packet to next hop {}", self.id, *next_hop); // Logged before sending each fragment of a message to the next hop in the calculated path.
                         self.send_packet_and_notify(packet, *next_hop); // Sends each fragment to the next hop.
                     }
                 } else {
@@ -995,7 +1011,7 @@ impl DronegowskiClient {
                 error!("Client {}: Invalid path to {}", self.id, target_id); // Logged as an error if the calculated path is invalid (e.g., empty or too short). Indicates a routing problem.
             }
         } else {
-            warn!("Client {}: No path to {}", self.id, target_id); // Logged as a warning if no path could be computed to the target node. Indicates the target is unreachable.
+            // warn!("Client {}: No path to {}", self.id, target_id); // Logged as a warning if no path could be computed to the target node. Indicates the target is unreachable.
         }
     }
 
@@ -1034,7 +1050,7 @@ impl DronegowskiClient {
     fn add_neighbor(&mut self, node_id: NodeId, sender: Sender<Packet>) {
         // info!("Client {}: Adding neighbor {}", self.id, node_id); // Logged when a new neighbor is added to the client's neighbor list.
         if self.packet_send.insert(node_id, sender).is_some() { // Inserts the neighbor and sender channel into the packet_send map.
-            warn!("Client {}: Replaced existing sender for node {}", self.id, node_id); // Logged as a warning if adding a neighbor replaces an existing entry for the same node ID. Indicates a potential configuration update or change in neighbors.
+            // warn!("Client {}: Replaced existing sender for node {}", self.id, node_id); // Logged as a warning if adding a neighbor replaces an existing entry for the same node ID. Indicates a potential configuration update or change in neighbors.
         }
         self.server_discovery();
     }
@@ -1047,7 +1063,7 @@ impl DronegowskiClient {
     fn remove_neighbor(&mut self, node_id: &NodeId) {
         // info!("Client {}: Removing neighbor {}", self.id, node_id); // Logged when a neighbor is removed from the client's neighbor list.
         if self.packet_send.remove(node_id).is_none() { // Removes the neighbor from the packet_send map.
-            warn!("Client {}: Node {} was not a neighbor.", self.id, node_id); // Logged as a warning if an attempt is made to remove a neighbor that is not currently in the neighbor list. Indicates an inconsistency in neighbor management.
+            // warn!("Client {}: Node {} was not a neighbor.", self.id, node_id); // Logged as a warning if an attempt is made to remove a neighbor that is not currently in the neighbor list. Indicates an inconsistency in neighbor management.
         }
         self.server_discovery();
     }
@@ -1068,7 +1084,7 @@ impl DronegowskiClient {
             }
         };
 
-        info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
+        // info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
 
         // // Gets the sender ID.
         // let source_id = match packet.routing_header.source() {
@@ -1103,7 +1119,7 @@ impl DronegowskiClient {
             session_id: packet.session_id, // Carries over the session ID from the request.
         };
 
-        info!("Client {}: Sending FloodResponse, response packet: {:?}", self.id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
+        // info!("Client {}: Sending FloodResponse, response packet: {:?}", self.id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
 
         // Sends the FloodResponse to the sender.
         let next_node = response_packet.routing_header.hops[1]; // Gets the next hop from the response packet's routing header.
