@@ -186,7 +186,7 @@ impl DronegowskiClient {
                 }
             }
             PacketType::Nack(ref nack) => {
-                info!("PORCO DIOOOO Client {}: Received Nack, {}", self.id, packet.clone().routing_header.hops); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
+                info!("PORCO DIOOOO Client {}: Received Nack, {:?}", self.id, packet.clone().routing_header.hops); // Logged when the client receives a Nack packet.  Indicates that a fragment was not successfully received by the next hop, triggering retransmission or alternative path calculation.
                 let drop_drone = packet.clone().routing_header.hops[0];
                 // NACK HANDLING METHOD
                 self.handle_nack(nack.clone(), packet.session_id, drop_drone); // Handles Negative Acknowledgements (NACKs) for error recovery.
