@@ -219,7 +219,7 @@ impl DronegowskiClient {
                         .sim_controller_send
                         .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {} / {}", self.id, counter, id_drop_drone, nack.fragment_index)));
 
-                    info!("Client {}: 4 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
+                    // info!("Client {}: 4 NACKs from drone {} for fragment {}. Calculating alternative path", self.id, id_drop_drone, nack.fragment_index); // Logged when the number of NACKs (specifically of type 'Dropped') for a fragment exceeds a threshold (5 in this case). Triggers the process of finding an alternative path.
 
 
                     // Add the problematic node to excluded nodes
@@ -245,8 +245,8 @@ impl DronegowskiClient {
                                     new_packet.routing_header.hop_index = 1; // Resets hop index for the new path.
 
                                     if let Some(next_hop) = new_packet.routing_header.hops.get(1) { // Gets the next hop in the new path.
-                                        info!("Client {}: Resending fragment {} via new path: {:?}",
-                                            self.id, nack.fragment_index, new_packet.routing_header.hops); // Logged when a fragment is being resent using an alternative path due to excessive NACKs. Shows the new path being used.
+                                        // info!("Client {}: Resending fragment {} via new path: {:?}",
+                                        //    self.id, nack.fragment_index, new_packet.routing_header.hops); // Logged when a fragment is being resent using an alternative path due to excessive NACKs. Shows the new path being used.
                                         // add Client event
 
                                         self.send_packet_and_notify(new_packet.clone(), *next_hop); // Cloned here to fix borrow error, resends the fragment using the new path.
@@ -621,7 +621,7 @@ impl DronegowskiClient {
 
     /// Sends a Flood request to discover servers.
     pub fn server_discovery(&mut self) {
-        info!("Client {}: SERVER_DISCOVERY_START. Current packet_send: {:?}", self.id, self.packet_send.keys());
+        // info!("Client {}: SERVER_DISCOVERY_START. Current packet_send: {:?}", self.id, self.packet_send.keys());
         self.topology.clear();
         self.node_types.clear();
         // self.seen_flood_ids_for_forwarding.clear(); // Se implementi il tracking dei flood_id inoltrati
@@ -631,10 +631,10 @@ impl DronegowskiClient {
             initiator_id: self.id,
             path_trace: vec![(self.id, NodeType::Client)],
         };
-        info!("Client {}: Generated FloodRequest with flood_id: {}", self.id, flood_request_core.flood_id);
+        // info!("Client {}: Generated FloodRequest with flood_id: {}", self.id, flood_request_core.flood_id);
 
         for (&node_id, _) in &self.packet_send {
-            info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
+            // info!("Client {}: Sending FloodRequest (id: {}) to direct neighbor {}", self.id, flood_request_core.flood_id, node_id);
             let packet = Packet {
                 pack_type: PacketType::FloodRequest(flood_request_core.clone()),
                 routing_header: SourceRoutingHeader {
@@ -645,7 +645,7 @@ impl DronegowskiClient {
             };
             self.send_packet_and_notify(packet, node_id);
         }
-        info!("Client {}: SERVER_DISCOVERY_END.", self.id);
+        // info!("Client {}: SERVER_DISCOVERY_END.", self.id);
     }
 
     /// Updates the network topology and node types based on the received path_trace.
@@ -654,7 +654,7 @@ impl DronegowskiClient {
     ///
     /// * `path_trace`: A vector of (NodeId, NodeType) representing the discovered path.
     fn update_graph(&mut self, path_trace: Vec<(NodeId, NodeType)>) {
-        info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
+        // info!("Client {}: UPDATE_GRAPH_START with path_trace: {:?}", self.id, path_trace);
         for i in 0..path_trace.len() - 1 {
             let (node_a, _) = path_trace[i];
             let (node_b, _) = path_trace[i + 1];
@@ -667,7 +667,7 @@ impl DronegowskiClient {
         for (node_id, node_type) in path_trace { // Considera se vuoi loggare anche questo
             self.node_types.insert(node_id, node_type);
         }
-        debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
+        // debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
 
         //QUESTA è LA PARTE CHE TI CHIEDO DI FARE
         //let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Client: {} - topology after last update", self))); // Invia al SC per visibilità
@@ -676,6 +676,7 @@ impl DronegowskiClient {
         // --- INIZIO BLOCCO AGGIORNATO (STAMPA SU CONSOLE) ---
 
         // Usiamo una stampa chiaramente identificabile per il debug
+
         println!("\n============================================================");
         println!(
             "DEBUG | Client {}: Analisi percorsi dopo aggiornamento della topologia",
@@ -992,7 +993,7 @@ impl DronegowskiClient {
             if let (Some(next_hop), true) = (path.get(1), path.len() > 1) { // Checks if there is a valid next hop in the calculated path.
                 if let Some(_) = self.packet_send.get(next_hop) { // Checks if there is a sender channel for the next hop.
                     for packet in fragments { // Iterates through each fragment.
-                        info!("Client {}: Sending packet to next hop {}", self.id, *next_hop); // Logged before sending each fragment of a message to the next hop in the calculated path.
+                        // info!("Client {}: Sending packet to next hop {}", self.id, *next_hop); // Logged before sending each fragment of a message to the next hop in the calculated path.
                         self.send_packet_and_notify(packet, *next_hop); // Sends each fragment to the next hop.
                     }
                 } else {
@@ -1002,7 +1003,7 @@ impl DronegowskiClient {
                 error!("Client {}: Invalid path to {}", self.id, target_id); // Logged as an error if the calculated path is invalid (e.g., empty or too short). Indicates a routing problem.
             }
         } else {
-            warn!("Client {}: No path to {}", self.id, target_id); // Logged as a warning if no path could be computed to the target node. Indicates the target is unreachable.
+            // warn!("Client {}: No path to {}", self.id, target_id); // Logged as a warning if no path could be computed to the target node. Indicates the target is unreachable.
         }
     }
 
@@ -1041,7 +1042,7 @@ impl DronegowskiClient {
     fn add_neighbor(&mut self, node_id: NodeId, sender: Sender<Packet>) {
         // info!("Client {}: Adding neighbor {}", self.id, node_id); // Logged when a new neighbor is added to the client's neighbor list.
         if self.packet_send.insert(node_id, sender).is_some() { // Inserts the neighbor and sender channel into the packet_send map.
-            warn!("Client {}: Replaced existing sender for node {}", self.id, node_id); // Logged as a warning if adding a neighbor replaces an existing entry for the same node ID. Indicates a potential configuration update or change in neighbors.
+            // warn!("Client {}: Replaced existing sender for node {}", self.id, node_id); // Logged as a warning if adding a neighbor replaces an existing entry for the same node ID. Indicates a potential configuration update or change in neighbors.
         }
         self.server_discovery();
     }
@@ -1054,7 +1055,7 @@ impl DronegowskiClient {
     fn remove_neighbor(&mut self, node_id: &NodeId) {
         // info!("Client {}: Removing neighbor {}", self.id, node_id); // Logged when a neighbor is removed from the client's neighbor list.
         if self.packet_send.remove(node_id).is_none() { // Removes the neighbor from the packet_send map.
-            warn!("Client {}: Node {} was not a neighbor.", self.id, node_id); // Logged as a warning if an attempt is made to remove a neighbor that is not currently in the neighbor list. Indicates an inconsistency in neighbor management.
+            // warn!("Client {}: Node {} was not a neighbor.", self.id, node_id); // Logged as a warning if an attempt is made to remove a neighbor that is not currently in the neighbor list. Indicates an inconsistency in neighbor management.
         }
         self.server_discovery();
     }
@@ -1075,7 +1076,7 @@ impl DronegowskiClient {
             }
         };
 
-        info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
+        // info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
 
         // // Gets the sender ID.
         // let source_id = match packet.routing_header.source() {
@@ -1110,7 +1111,7 @@ impl DronegowskiClient {
             session_id: packet.session_id, // Carries over the session ID from the request.
         };
 
-        info!("Client {}: Sending FloodResponse, response packet: {:?}", self.id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
+        // info!("Client {}: Sending FloodResponse, response packet: {:?}", self.id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
 
         // Sends the FloodResponse to the sender.
         let next_node = response_packet.routing_header.hops[1]; // Gets the next hop from the response packet's routing header.
