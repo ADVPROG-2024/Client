@@ -272,6 +272,7 @@ impl DronegowskiClient {
             }
             _ => {
                 // Handling other NACK types (e.g., Corrupted). For now, triggers server discovery and resends fragment.
+                self.server_discovery(); // Re-initiates server discovery, potentially network topology has changed.
                 if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
                     if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
                         self.send_packet_and_notify(packet.clone(), packet.routing_header.hops[1]); // Resends the fragment to the original next hop.
@@ -908,99 +909,55 @@ impl DronegowskiClient {
     ///
     /// * `packet`: The packet containing the FloodRequest.
     fn handle_flood_request(&mut self, packet: Packet) {
-        let mut received_flood_request = match packet.pack_type {
-            PacketType::FloodRequest(req) => req,
+        // Extracts the FloodRequest from the packet.
+        let flood_request = match packet.pack_type {
+            PacketType::FloodRequest(req) => req, // Extracts the FloodRequest from the packet.
             _ => {
-                error!("Client {}: handle_flood_request called with a non-FloodRequest packet type", self.id);
+                // Should never happen.
+                error!("Client {}: handle_flood_request called with a non-FloodRequest packet type", self.id); // Logged as an error if `handle_flood_request` is called with a packet that is not of type `FloodRequest`. This is a programming error.
                 return;
             }
         };
 
-        // Logga il FloodRequest ricevuto
-        info!(
-            "Client {}: HANDLE_FLOOD_REQUEST_START - Received FloodRequest (id: {}) from initiator {}, via hops: {:?}. Incoming PathTrace: {:?}",
-            self.id,
-            received_flood_request.flood_id,
-            received_flood_request.initiator_id,
-            packet.routing_header.hops,
-            received_flood_request.path_trace
-        );
+        info!("Client {}: Received FloodRequest: {:?}", self.id, flood_request); // Logged when the client receives a FloodRequest packet, indicating the start of network discovery by another node.
 
-        // 1. Aggiorna la topologia locale con le informazioni dal path_trace ricevuto.
-        //    Questo permette al client di imparare la struttura della rete.
-        //    È importante farlo prima di qualsiasi controllo anti-loop basato sul path_trace
-        //    se vogliamo imparare anche dai percorsi che potrebbero portare a un loop.
-        self.update_graph(received_flood_request.path_trace.clone());
+        // // Gets the sender ID.
+        // let source_id = match packet.routing_header.source() {
+        //     Some(id) => id, // Gets the source ID from the routing header.
+        //     None => {
+        //         warn!("Client {}: FloodRequest without sender", self.id); // Logged as a warning if a FloodRequest packet is received without a source ID. Indicates a malformed packet.
+        //         return;
+        //     }
+        // };
 
-        // 2. Controlla se questo client è l'iniziatore del flood.
-        //    Se sì, non fare nulla per l'inoltro (sta ricevendo il suo stesso flood).
-        if received_flood_request.initiator_id == self.id {
-            info!("Client {}: Ignoring FloodRequest (id: {}) for forwarding because self is the initiator.", self.id, received_flood_request.flood_id);
-            return;
-        }
+        // Updates the graph with path_trace information.
+        // self.update_graph(flood_request.path_trace.clone()); // Updates the network topology based on the received path trace.
 
-        // 3. Controlla se questo client è GIA' nel path_trace del FloodRequest ricevuto.
-        //    Se è già nel percorso, inoltrarlo di nuovo creerebbe un ciclo.
-        //    Il path_trace qui è quello *prima* che questo client vi si aggiunga.
-        if received_flood_request.path_trace.iter().any(|(id, _)| *id == self.id) {
-            info!("Client {}: Ignoring FloodRequest (id: {}) for forwarding because self ({}) is already in its path_trace: {:?}.",
-                  self.id, received_flood_request.flood_id, self.id, received_flood_request.path_trace);
-            return;
-        }
+        // Prepares the path_trace for the response and inserts the client node.
+        let mut response_path_trace = flood_request.path_trace.clone();
+        response_path_trace.push((self.id, NodeType::Client)); // Appends the client's own node and type to the path trace for the response.
 
-        // (SENZA forwarded_flood_ids, non possiamo prevenire l'inoltro multiplo se lo stesso flood arriva da vicini diversi.
-        //  Se potessi aggiungerlo, qui ci sarebbe il controllo:
-        //  if self.forwarded_flood_ids.contains(&received_flood_request.flood_id) { return; } )
+        // Creates the FloodResponse.
+        let flood_response = FloodResponse {
+            flood_id: flood_request.flood_id, // Carries over the flood ID from the request.
+            path_trace: response_path_trace.clone(), // Sets the path trace for the response.
+        };
 
-        // 4. Aggiungi questo client al path_trace del FloodRequest.
-        received_flood_request.path_trace.push((self.id, NodeType::Client));
-        info!("Client {}: Added self to path_trace for FloodRequest (id: {}). New PathTrace: {:?}", self.id, received_flood_request.flood_id, received_flood_request.path_trace);
+        // Creates the response packet.
+        let response_packet = Packet {
+            pack_type: PacketType::FloodResponse(flood_response.clone()), // Sets packet type to FloodResponse.
+            routing_header: SourceRoutingHeader {
+                hop_index: 1,
+                // Reverses the path_trace to return to the sender.
+                hops: response_path_trace.iter().rev().map(|(id, _)| *id).collect(), // Reverses the received path trace to create the return path.
+            },
+            session_id: packet.session_id, // Carries over the session ID from the request.
+        };
 
-        // 5. Inoltra il FloodRequest (ora con questo client nel path_trace) a tutti i vicini,
-        //    eccetto quello da cui è arrivato questo pacchetto.
-        let source_node_of_this_packet = packet.routing_header.source(); // Chi ha inviato questo pacchetto al client
+        info!("Client {}: Sending FloodResponse, response packet: {:?}", self.id, response_packet); // Logged before sending a FloodResponse packet back to the initiator of the FloodRequest. Shows the recipient and the content of the response packet.
 
-        let mut forwarded_count = 0;
-        for (&neighbor_id, _) in &self.packet_send {
-            if Some(neighbor_id) == source_node_of_this_packet {
-                info!("Client {}: Not forwarding FloodRequest (id: {}) back to sender neighbor {}", self.id, received_flood_request.flood_id, neighbor_id);
-                continue;
-            }
-
-            // Ulteriore controllo anti-loop: non inoltrare a un vicino se quel vicino è già nel path_trace
-            // (escludendo l'ultimo elemento che è il client stesso, aggiunto appena sopra).
-            // Questo è più specifico del controllo generico al punto 3.
-            if received_flood_request.path_trace[..received_flood_request.path_trace.len()-1].iter().any(|(id,_)| *id == neighbor_id) {
-                info!("Client {}: Not forwarding FloodRequest (id: {}) to neighbor {} because neighbor is already in path_trace (excluding self).", self.id, received_flood_request.flood_id, neighbor_id);
-                continue;
-            }
-
-
-            info!(
-                "Client {}: Forwarding FloodRequest (id: {}, initiator: {}) to neighbor {}.",
-                self.id, received_flood_request.flood_id, received_flood_request.initiator_id, neighbor_id
-            );
-
-            let packet_to_forward = Packet {
-                pack_type: PacketType::FloodRequest(received_flood_request.clone()),
-                routing_header: SourceRoutingHeader {
-                    hop_index: 0,
-                    hops: vec![self.id, neighbor_id],
-                },
-                session_id: received_flood_request.flood_id,
-            };
-            self.send_packet_and_notify(packet_to_forward, neighbor_id);
-            forwarded_count += 1;
-        }
-
-        // (SENZA forwarded_flood_ids, non possiamo marcare il flood come inoltrato in modo affidabile
-        // per prevenire inoltri da altri rami. Se potessi aggiungerlo:
-        // if forwarded_count > 0 { self.forwarded_flood_ids.insert(received_flood_request.flood_id); } )
-
-        if forwarded_count == 0 {
-            info!("Client {}: FloodRequest (id: {}) not forwarded further (no suitable other neighbors).", self.id, received_flood_request.flood_id);
-        }
-        info!("Client {}: HANDLE_FLOOD_REQUEST_END for FloodRequest (id: {}).", self.id, received_flood_request.flood_id);
-        // NON si invia FloodResponse qui.
+        // Sends the FloodResponse to the sender.
+        let next_node = response_packet.routing_header.hops[1]; // Gets the next hop from the response packet's routing header.
+        self.send_packet_and_notify(response_packet, next_node); // Sends the FloodResponse packet to the next hop.
     }
 }
