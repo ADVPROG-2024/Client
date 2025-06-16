@@ -155,11 +155,11 @@ impl DronegowskiClient {
         match packet.pack_type {
             PacketType::MsgFragment(_) => self.handle_message_fragment(packet), // Handles message fragments for reassembly.
             PacketType::FloodResponse(flood_response) => {
-                // info!(
-                //     "Client {}: Received FloodResponse: {:?}",
-                //     self.id,
-                //     flood_response
-                // ); // Logged when the client receives a FloodResponse packet.  Indicates that a server discovery process is underway and the client is receiving network topology information.
+                info!(
+                    "Client {}: Received FloodResponse: {:?}",
+                    self.id,
+                    flood_response
+                ); // Logged when the client receives a FloodResponse packet.  Indicates that a server discovery process is underway and the client is receiving network topology information.
                 self.update_graph(flood_response.path_trace); // Updates network topology based on FloodResponse.
             }
             PacketType::FloodRequest(_) => self.handle_flood_request(packet), // Handles flood requests to participate in network discovery.
