@@ -136,7 +136,10 @@ impl DronegowskiClient {
             ClientCommand::ClientList(node_id) => self.request_client_list(&node_id), // Requests client list from a specific node.
             ClientCommand::RegistrationToChat(node_id) => self.register_with_server(&node_id), // Registers with a chat server.
             ClientCommand::MessageFor(node_id, client_id, message) => self.send_message(&node_id, client_id, message), // Sends a message to another client via a server.
-            ClientCommand::RequestNetworkDiscovery => self.server_discovery(), // Initiates network discovery.
+            ClientCommand::RequestNetworkDiscovery => {
+                warn!("Client {} SC requested me network discovery", self.id);
+                self.server_discovery() // Initiates network discovery.
+            }
             ClientCommand::ControllerShortcut(packet) => self.handle_packet(packet), // Handles a packet directly sent from the controller (for testing or specific scenarios).
         }
     }
@@ -306,13 +309,23 @@ impl DronegowskiClient {
             // Iterate over neighbors excluding problematic nodes
             for &(a, b) in &self.topology { // Iterate through the network topology (edges).
                 if a == current_node && !self.excluded_nodes.contains(&b) && !visited.contains(&b) { // If 'b' is a neighbor of 'a', 'b' is not excluded, and 'b' is not visited.
-                    visited.insert(b); // Mark 'b' as visited.
-                    queue.push_back(b); // Add 'b' to the queue for further exploration.
-                    predecessors.insert(b, a); // Set 'a' as the predecessor of 'b'.
+                    if a == current_node && !visited.contains(&b) {
+                        if let Some(node_type) = self.node_types.get(&b) {
+                            if *node_type != NodeType::Client || b == *target_server {
+                                visited.insert(b); // Mark 'b' as visited.
+                                queue.push_back(b); // Add 'b' to the queue for further exploration.
+                                predecessors.insert(b, a); // Set 'a' as the predecessor of 'b'.
+                            }
+                        }
+                    }
                 } else if b == current_node && !self.excluded_nodes.contains(&a) && !visited.contains(&a) { // If 'a' is a neighbor of 'b', 'a' is not excluded and 'a' is not visited.
-                    visited.insert(a); // Mark 'a' as visited.
-                    queue.push_back(a); // Add 'a' to the queue.
-                    predecessors.insert(a, b); // Set 'b' as the predecessor of 'a'.
+                    if let Some(node_type) = self.node_types.get(&a) {
+                        if *node_type != NodeType::Client || a == *target_server {
+                            visited.insert(a); // Mark 'a' as visited.
+                            queue.push_back(a); // Add 'a' to the queue.
+                            predecessors.insert(a, b); // Set 'b' as the predecessor of 'a'.
+                        }
+                    }
                 }
             }
         }
@@ -689,15 +702,23 @@ impl DronegowskiClient {
             for &(node_a, node_b) in &self.topology { // Iterate through the network topology (edges).
                 // Checks neighbors in both directions.
                 if node_a == current_node && !visited.contains(&node_b) { // If 'b' is a neighbor of 'a' and 'b' has not been visited yet.
-                    debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_b, node_a); // Debug log indicating exploration of a neighbor node during BFS.
-                    visited.insert(node_b); // Mark 'b' as visited.
-                    queue.push_back(node_b); // Add 'b' to the queue for further exploration.
-                    predecessors.insert(node_b, node_a); // Stores the predecessor.
+                    if let Some(node_type) = self.node_types.get(&node_b) {
+                        if *node_type != NodeType::Client || node_b == *target_server {
+                            debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_b, node_a); // Debug log indicating exploration of a neighbor node during BFS.
+                            visited.insert(node_b); // Mark 'b' as visited.
+                            queue.push_back(node_b); // Add 'b' to the queue for further exploration.
+                            predecessors.insert(node_b, node_a); // Stores the predecessor.
+                        }
+                    }
                 } else if node_b == current_node && !visited.contains(&node_a) { // If 'a' is a neighbor of 'b' and 'a' has not been visited yet.
-                    debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_a, node_b); // Debug log indicating exploration of a neighbor node during BFS.
-                    visited.insert(node_a); // Mark 'a' as visited.
-                    queue.push_back(node_a); // Add 'a' to the queue.
-                    predecessors.insert(node_a, node_b); // Stores the predecessor.
+                    if let Some(node_type) = self.node_types.get(&node_a) {
+                        if *node_type != NodeType::Client || node_a == *target_server {
+                            debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_a, node_b); // Debug log indicating exploration of a neighbor node during BFS.
+                            visited.insert(node_a); // Mark 'a' as visited.
+                            queue.push_back(node_a); // Add 'a' to the queue.
+                            predecessors.insert(node_a, node_b); // Stores the predecessor.
+                        }
+                    }
                 }
             }
         }
