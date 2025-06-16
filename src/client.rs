@@ -737,37 +737,44 @@ impl DronegowskiClient {
 
     // NUOVA FUNZIONE HELPER RICORSIVA (PRIVATA)
     /// Funzione ricorsiva (DFS) per trovare tutti i percorsi.
+    // MODIFICA LA FUNZIONE find_paths_recursive in questo modo
+
     fn find_paths_recursive(
         &self,
         target: NodeId,
         current_path: &mut Vec<NodeId>,
         all_paths: &mut Vec<Vec<NodeId>>,
     ) {
-        // L'ultimo nodo nel percorso attuale è il nostro "nodo corrente"
         let last_node = *current_path.last().unwrap();
 
-        // Caso base: abbiamo raggiunto la destinazione
         if last_node == target {
             all_paths.push(current_path.clone());
             return;
         }
 
-        // Passo ricorsivo: esplora i vicini
-        for &(node_a, node_b) in &self.topology {
-            let neighbor = if node_a == last_node {
-                node_b
-            } else if node_b == last_node {
-                node_a
-            } else {
-                continue; // Questo link non riguarda il nostro nodo corrente
-            };
+        // --- INIZIO DELLA MODIFICA CHIAVE ---
 
-            // 1. Controllo anti-ciclo: non visitare un nodo già presente nel percorso attuale.
+        // 1. Raccogliamo un SET di vicini unici per evitare duplicati
+        let mut neighbors = HashSet::new();
+        for &(node_a, node_b) in &self.topology {
+            if node_a == last_node {
+                neighbors.insert(node_b);
+            } else if node_b == last_node {
+                neighbors.insert(node_a);
+            }
+        }
+
+        // 2. Iteriamo sul set di vicini unici
+        for &neighbor in &neighbors {
+
+            // --- FINE DELLA MODIFICA CHIAVE ---
+
+            // Controllo anti-ciclo: non visitare un nodo già presente nel percorso attuale.
             if current_path.contains(&neighbor) {
                 continue;
             }
 
-            // 2. Controllo tipo di nodo: non passare attraverso altri client a meno che non siano la destinazione finale.
+            // Controllo tipo di nodo: non passare attraverso altri client a meno che non siano la destinazione finale.
             if let Some(node_type) = self.node_types.get(&neighbor) {
                 if *node_type == wg_2024::packet::NodeType::Client && neighbor != target {
                     continue;
@@ -781,8 +788,7 @@ impl DronegowskiClient {
             current_path.push(neighbor);
             self.find_paths_recursive(target, current_path, all_paths);
 
-            // BACKTRACKING: Rimuovi il vicino dal percorso attuale per poter esplorare
-            // altri rami a partire da `last_node`. Questo è il cuore del DFS.
+            // BACKTRACKING
             current_path.pop();
         }
     }
