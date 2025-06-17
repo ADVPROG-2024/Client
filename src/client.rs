@@ -210,7 +210,7 @@ impl DronegowskiClient {
             *counter += 1;
 
             info!("DIO CANEEEEE bastardo - Client {} - counter: {:?}, dropid {}", self.id, counter, id_drop_drone);
-            const RETRY_LIMIT: u8 = 3;
+            const RETRY_LIMIT: u8 = 9;
 
             // Se abbiamo ricevuto troppi NACK per questo specifico drone e frammento...
             if *counter > RETRY_LIMIT {
