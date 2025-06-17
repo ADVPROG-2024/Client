@@ -881,7 +881,7 @@ impl DronegowskiClient {
                 // Checks neighbors in both directions.
                 if node_a == current_node && !visited.contains(&node_b) { // If 'b' is a neighbor of 'a' and 'b' has not been visited yet.
                     if let Some(node_type) = self.node_types.get(&node_b) {
-                        if *node_type != NodeType::Client || node_b == *target_server {
+                        if *node_type == NodeType::Drone || node_b == *target_server {
                             debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_b, node_a); // Debug log indicating exploration of a neighbor node during BFS.
                             visited.insert(node_b); // Mark 'b' as visited.
                             queue.push_back(node_b); // Add 'b' to the queue for further exploration.
@@ -890,7 +890,7 @@ impl DronegowskiClient {
                     }
                 } else if node_b == current_node && !visited.contains(&node_a) { // If 'a' is a neighbor of 'b' and 'a' has not been visited yet.
                     if let Some(node_type) = self.node_types.get(&node_a) {
-                        if *node_type != NodeType::Client || node_a == *target_server {
+                        if *node_type == NodeType::Drone || node_a == *target_server {
                             debug!("Client {}: Exploring neighbor: {} of {}", self.id, node_a, node_b); // Debug log indicating exploration of a neighbor node during BFS.
                             visited.insert(node_a); // Mark 'a' as visited.
                             queue.push_back(node_a); // Add 'a' to the queue.
