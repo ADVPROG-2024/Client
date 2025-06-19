@@ -302,6 +302,11 @@ impl DronegowskiClient {
             if let Some(fragments) = self.pending_messages.get(&session_id) {
                 if let Some(updated_packet) = fragments.get(fragment_index as usize) {
                     if let Some(&next_hop) = updated_packet.routing_header.hops.get(1) {
+
+                        let _ = self
+                            .sim_controller_send
+                            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: send with new route {:?}", self.id, new_path)));
+
                         self.send_packet_and_notify(updated_packet.clone(), next_hop);
                     } else {
                         error!("Client {}: Il nuovo percorso calcolato è invalido per il frammento {}.", self.id, fragment_index);
