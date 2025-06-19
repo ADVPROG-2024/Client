@@ -698,71 +698,6 @@ impl DronegowskiClient {
         }
         // debug!("Client {}: UPDATE_GRAPH_END. Updated topology: {:?}, Updated node_types: {:?}", self.id, self.topology, self.node_types);
 
-        //QUESTA è LA PARTE CHE TI CHIEDO DI FARE
-        //let _ = self.sim_controller_send.send(ClientEvent::DebugMessage(self.id, format!("Client: {} - topology after last update", self))); // Invia al SC per visibilità
-
-
-        // --- INIZIO BLOCCO AGGIORNATO (STAMPA SU CONSOLE) ---
-
-        // Usiamo una stampa chiaramente identificabile per il debug
-
-        println!("\n============================================================");
-        println!(
-            "DEBUG | Client {}: Analisi percorsi dopo aggiornamento della topologia",
-            self.id
-        );
-        println!(
-            "      | Nodi conosciuti: {}, Link conosciuti: {}",
-            self.node_types.len(),
-            self.topology.len()
-        );
-        println!("------------------------------------------------------------");
-
-        let mut found_servers = false;
-
-        // Itera su tutti i nodi conosciuti per trovare i server e calcolare i percorsi
-        for (&node_id, &node_type) in &self.node_types {
-            // Ci interessano solo i percorsi verso i server
-            if node_type == NodeType::Server {
-                found_servers = true;
-
-                // Chiama la nuova funzione per ottenere TUTTI i percorsi
-                let all_paths_to_server = self.compute_all_routes(&node_id);
-
-                if !all_paths_to_server.is_empty() {
-                    println!(
-                        "      | Trovati {} percorsi per Server {}:",
-                        all_paths_to_server.len(),
-                        node_id
-                    );
-                    // Stampa ogni percorso trovato
-                    for (i, path) in all_paths_to_server.iter().enumerate() {
-                        let path_str = path
-                            .iter()
-                            .map(|id| id.to_string())
-                            .collect::<Vec<String>>()
-                            .join(" -> ");
-
-                        println!("      |   {}) {}", i + 1, path_str);
-                    }
-                } else {
-                    // È un'informazione critica se un server conosciuto non è raggiungibile
-                    println!(
-                        "      | [FAIL] NESSUN percorso trovato per Server {}",
-                        node_id
-                    );
-                }
-            }
-        }
-
-        if !found_servers {
-            println!("      | Nessun server trovato nella topologia conosciuta.");
-        }
-
-        println!("============================================================\n");
-
-        // --- FINE BLOCCO AGGIORNATO ---
-
     }
 
     // NUOVA FUNZIONE PUBBLICA
@@ -778,10 +713,8 @@ impl DronegowskiClient {
         all_paths
     }
 
-    // NUOVA FUNZIONE HELPER RICORSIVA (PRIVATA)
-    /// Funzione ricorsiva (DFS) per trovare tutti i percorsi.
-    // MODIFICA LA FUNZIONE find_paths_recursive in questo modo
 
+    /// Funzione ricorsiva (DFS) per trovare tutti i percorsi.
     fn find_paths_recursive(
         &self,
         target: NodeId,
@@ -819,7 +752,7 @@ impl DronegowskiClient {
 
             // Controllo tipo di nodo: non passare attraverso altri client a meno che non siano la destinazione finale.
             if let Some(node_type) = self.node_types.get(&neighbor) {
-                if *node_type == wg_2024::packet::NodeType::Client && neighbor != target {
+                if *node_type == NodeType::Client && neighbor != target {
                     continue;
                 }
             } else {
