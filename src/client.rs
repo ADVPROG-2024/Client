@@ -216,7 +216,7 @@ impl DronegowskiClient {
 
                 let _ = self
                     .sim_controller_send
-                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {} / {}", self.id, counter, id_drop_drone, nack.fragment_index)));
+                    .send(ClientEvent::DebugMessage(self.id, format!("Client {}: nack drop {} from {}", self.id, counter, id_drop_drone)));
                 
                 info!("Client {}: Limite NACK ({}) superato per il drone {}. Lo escludo e ricalcolo il percorso per l'intera sessione.", self.id, RETRY_LIMIT, id_drop_drone);
                 self.excluded_nodes.insert(id_drop_drone);
@@ -248,9 +248,6 @@ impl DronegowskiClient {
             // Altri tipi di NACK: tentiamo subito un ricalcolo del percorso
             self.server_discovery(); // Re-initiates server discovery, potentially network topology has changed.
             // compute new route
-            let _ = self
-                .sim_controller_send
-                .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route?", self.id)));
 
             if let Some(fragments) = self.pending_messages.get(&session_id) { // Retrieves pending message fragments.
                 if let Some(packet) = fragments.get(nack.fragment_index as usize) { // Gets the NACKed fragment.
@@ -303,9 +300,9 @@ impl DronegowskiClient {
                 if let Some(updated_packet) = fragments.get(fragment_index as usize) {
                     if let Some(&next_hop) = updated_packet.routing_header.hops.get(1) {
 
-                        let _ = self
-                            .sim_controller_send
-                            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: send with new route {:?}", self.id, new_path)));
+                        // let _ = self
+                        //     .sim_controller_send
+                        //     .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route {:?}", self.id, new_path)));
 
                         self.send_packet_and_notify(updated_packet.clone(), next_hop);
                     } else {
@@ -403,9 +400,9 @@ impl DronegowskiClient {
             }
         };
 
-        let _ = self
-            .sim_controller_send
-            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: received from {}", self.id, src_id)));
+        // let _ = self
+        //     .sim_controller_send
+        //     .send(ClientEvent::DebugMessage(self.id, format!("Client {}: received from {}", self.id, src_id)));
 
         // info!(
         //     "Client {}: Received MsgFragment from: {}, Session: {}, Index: {}, Total: {}",
