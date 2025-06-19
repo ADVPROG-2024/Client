@@ -302,7 +302,7 @@ impl DronegowskiClient {
 
                         let _ = self
                             .sim_controller_send
-                            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: send *{:?}", self.id, new_path)));
+                            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: send new route {:?}", self.id, new_path)));
 
                         self.send_packet_and_notify(updated_packet.clone(), next_hop);
                     } else {
