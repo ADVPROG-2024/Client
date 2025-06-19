@@ -300,9 +300,9 @@ impl DronegowskiClient {
                 if let Some(updated_packet) = fragments.get(fragment_index as usize) {
                     if let Some(&next_hop) = updated_packet.routing_header.hops.get(1) {
 
-                        // let _ = self
-                        //     .sim_controller_send
-                        //     .send(ClientEvent::DebugMessage(self.id, format!("Client {}: new route {:?}", self.id, new_path)));
+                        let _ = self
+                            .sim_controller_send
+                            .send(ClientEvent::DebugMessage(self.id, format!("Client {}: send new route {:?}", self.id, new_path)));
 
                         self.send_packet_and_notify(updated_packet.clone(), next_hop);
                     } else {
@@ -700,7 +700,6 @@ impl DronegowskiClient {
 
     }
 
-    // NUOVA FUNZIONE PUBBLICA
     /// Calcola tutti i percorsi semplici (senza cicli) verso un server di destinazione.
     ///
     /// # Returns
@@ -743,8 +742,6 @@ impl DronegowskiClient {
         // 2. Iteriamo sul set di vicini unici
         for &neighbor in &neighbors {
 
-            // --- FINE DELLA MODIFICA CHIAVE ---
-
             // Controllo anti-ciclo: non visitare un nodo già presente nel percorso attuale.
             if current_path.contains(&neighbor) {
                 continue;
@@ -764,7 +761,6 @@ impl DronegowskiClient {
             current_path.push(neighbor);
             self.find_paths_recursive(target, current_path, all_paths);
 
-            // BACKTRACKING
             current_path.pop();
         }
     }
